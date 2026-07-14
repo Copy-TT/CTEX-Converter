@@ -12,14 +12,14 @@ CTEX Converter is a browser-based viewer and converter for PNG, JPEG, and suppor
 - Export the current image as PNG, JPG, or a newly generated CTEX file
 - Rotate left or right, flip horizontally, and flip vertically before exporting
 - Choose a JPG background color when converting transparent images
-- Zoom manually or let the preview automatically fit the available space
+- Zoom the preview manually or let it automatically fit the available space
 - Use the interface in English, Korean, Japanese, or Simplified Chinese
 
 ## How to use it
 
 1. Choose **Open PNG**, **Open JPG**, or **Open CTEX**. You can also drop a supported file into the preview area.
 2. Inspect the preview and file information.
-3. Optionally rotate, flip, zoom, or set a JPG background color. JPG does not support transparency, so transparent pixels are composited onto the selected background color when you export JPG.
+3. Optionally rotate or flip the image, or set a JPG background color. You can also zoom the preview; zoom changes only the on-screen view and does not affect export resolution. JPG does not support transparency, so transparent pixels are composited onto the selected background color when you export JPG.
 4. Choose **Export PNG**, **Export JPG**, or **Export CTEX**.
 
 Opening another file replaces the current image and clears its rotation and flip state. Export settings such as the JPG background color and Auto-fit Preview option remain available for the next file.
@@ -46,14 +46,14 @@ CTEX Converter는 PNG, JPEG 및 지원되는 Godot CTEX 텍스처 파일을 브�
 - 현재 이미지를 PNG, JPG 또는 새 CTEX 파일로 내보내기
 - 내보내기 전 좌·우 회전, 좌우 반전, 상하 반전
 - 투명 이미지를 JPG로 변환할 때 JPG 배경색 선택
-- 수동 확대·축소 또는 Preview 자동 맞춤
+- Preview 전용 수동 확대·축소 또는 자동 맞춤
 - English, 한국어, 日本語, 简体中文 인터페이스
 
 ## 사용 방법
 
 1. **Open PNG**, **Open JPG**, **Open CTEX** 중 하나를 선택합니다. 지원되는 파일을 Preview 영역으로 끌어다 놓아도 됩니다.
 2. Preview와 파일 정보를 확인합니다.
-3. 필요하면 회전, 반전, 확대·축소 또는 JPG 배경색을 설정합니다. JPG는 투명도를 지원하지 않으므로, JPG로 내보낼 때 투명 픽셀은 선택한 배경색 위에 합성됩니다.
+3. 필요하면 회전, 반전 또는 JPG 배경색을 설정합니다. Preview는 확대·축소할 수 있지만, 이는 화면 표시만 바꾸며 내보내기 해상도에는 영향을 주지 않습니다. JPG는 투명도를 지원하지 않으므로, JPG로 내보낼 때 투명 픽셀은 선택한 배경색 위에 합성됩니다.
 4. **Export PNG**, **Export JPG**, **Export CTEX** 중 하나를 선택합니다.
 
 다른 파일을 열면 현재 이미지가 교체되고 회전·반전 상태는 초기화됩니다. JPG 배경색과 Auto-fit Preview 같은 내보내기 설정은 다음 파일에서도 유지됩니다.
