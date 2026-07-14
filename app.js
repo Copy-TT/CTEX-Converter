@@ -1,4 +1,4 @@
-import { translations } from "./locales.js?v=0.7.3";
+import { translations } from "./locales.js?v=0.7.4";
 
 const CTEX_WEBP_PAYLOAD_OFFSET = 56;
 const CTEX_MAX_DIMENSION = 0xffff;
