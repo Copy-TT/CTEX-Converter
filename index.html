@@ -4,39 +4,39 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CTEX Converter v0.7.5</title>
-    <link rel="stylesheet" href="style.css?v=0.7.5" />
+    <link rel="stylesheet" href="style.css?v=0.7.5.1" />
   </head>
   <body>
     <main class="app-shell">
       <header>
           <div><p class="eyebrow" data-i18n="browserLocal">BROWSER-BASED · LOCAL ONLY</p><h1>CTEX Converter <span>v0.7.5</span></h1></div>
         <div class="header-actions">
-          <div class="header-controls"><label class="language-select"><span class="sr-only" data-i18n="languageLabel">Language</span><select id="language-select" aria-label="Language"><option value="en">English</option><option value="ko">한국어</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ru">Русский</option></select></label><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode">🌙</button></div>
+          <div class="header-controls"><label class="language-select"><span class="sr-only" data-i18n="languageLabel">Language</span><select id="language-select" aria-label="Language" data-i18n-aria="languageLabel"><option value="en">English</option><option value="ko">한국어</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ru">Русский</option></select></label><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode">🌙</button></div>
           <p id="status" class="status status-info" role="status"><span id="status-icon" class="status-icon" aria-hidden="true">ⓘ</span><span id="status-text">Open a PNG, JPG, or supported CTEX file to begin.</span></p>
         </div>
       </header>
       <section class="workspace">
         <aside class="sidebar">
           <h2 data-i18n="openFiles">Open File</h2>
-          <div class="open-buttons"><button id="open-png" type="button">Open PNG</button><button id="open-jpg" type="button">Open JPG</button><button id="open-ctex" type="button">Open CTEX</button></div>
+          <div class="open-buttons"><button id="open-png" type="button" data-i18n="openPng">Open PNG</button><button id="open-jpg" type="button" data-i18n="openJpg">Open JPG</button><button id="open-ctex" type="button" data-i18n="openCtex">Open CTEX</button></div>
           <button id="clear-file" type="button" class="clear-button" disabled data-i18n="clearFile">Clear File</button>
           <input id="png-input" type="file" accept="image/png,.png" hidden /><input id="jpg-input" type="file" accept="image/jpeg,.jpg,.jpeg,.jpe,.jfif" hidden /><input id="ctex-input" type="file" accept=".ctex" hidden />
           <dl class="metadata"><div><dt data-i18n="fileName">Name</dt><dd id="file-name">-</dd></div><div><dt data-i18n="format">Format</dt><dd id="file-format">-</dd></div><div><dt data-i18n="fileSize">Size</dt><dd id="file-size">-</dd></div><div><dt data-i18n="resolution">Resolution</dt><dd id="resolution">-</dd></div></dl>
         </aside>
-        <section id="preview-panel" class="preview-panel" aria-label="Image preview" tabindex="0"><div id="drop-zone" class="drop-zone"><strong data-i18n="dropFiles">Drop a file</strong></div><div id="canvas-wrap" class="canvas-wrap" hidden><canvas id="preview-canvas"></canvas></div></section>
+        <section id="preview-panel" class="preview-panel" aria-label="Image preview" data-i18n-aria="previewLabel"><div id="drop-zone" class="drop-zone"><strong data-i18n="dropFiles">Drop a file</strong></div><div id="canvas-wrap" class="canvas-wrap" hidden><canvas id="preview-canvas"></canvas></div></section>
         <aside class="sidebar tools">
           <h2 data-i18n="export">Export File</h2>
-          <button id="export-png" type="button" disabled>Export PNG</button><button id="export-jpg" type="button" disabled>Export JPG</button><button id="export-ctex" type="button" disabled>Export CTEX</button>
-          <section class="export-settings" aria-label="Export settings">
+          <button id="export-png" type="button" disabled data-i18n="exportPng">Export PNG</button><button id="export-jpg" type="button" disabled data-i18n="exportJpg">Export JPG</button><button id="export-ctex" type="button" disabled data-i18n="exportCtex">Export CTEX</button>
+          <section class="export-settings" aria-label="Export settings" data-i18n-aria="exportSettings">
             <label class="setting-row"><span data-i18n="jpgBackground">JPG Background</span><select id="jpg-background"><option value="white" data-i18n="backgroundWhite">White</option><option value="gray" data-i18n="backgroundGray">Gray</option><option value="black" data-i18n="backgroundBlack">Black</option><option value="custom" data-i18n="backgroundCustom">Custom</option></select></label>
             <div id="custom-background" class="custom-background">
               <div class="rgb-inputs"><label>R<input id="bg-r" type="number" min="0" max="255" inputmode="numeric" value="255" /></label><label>G<input id="bg-g" type="number" min="0" max="255" inputmode="numeric" value="255" /></label><label>B<input id="bg-b" type="number" min="0" max="255" inputmode="numeric" value="255" /></label></div>
-              <label class="hex-input">HEX<input id="bg-hex" type="text" value="#FFFFFF" maxlength="7" spellcheck="false" /></label><span id="bg-swatch" class="color-swatch" aria-label="Selected background color"></span>
+              <label class="hex-input">HEX<input id="bg-hex" type="text" value="#FFFFFF" maxlength="7" spellcheck="false" /></label><span id="bg-swatch" class="color-swatch" aria-label="Selected JPG background color" data-i18n-aria="selectedBackgroundColor"></span>
             </div>
           </section>
           <hr />
           <div class="transform-controls"><button id="rotate-left" type="button" disabled>↶</button><button id="rotate-right" type="button" disabled>↷</button><button id="flip-horizontal" type="button" disabled>⇋</button><button id="flip-vertical" type="button" disabled>⇅</button></div>
-          <div class="transform-actions"><button id="rotate-180" type="button" disabled>180°</button><button id="reset-transform" type="button" disabled data-i18n="resetTransform">Reset</button></div>
+          <div class="transform-actions"><button id="rotate-180" type="button" disabled>180°</button><button id="reset-transform" type="button" disabled data-i18n="resetLabel">Reset</button></div>
           <hr />
           <div class="zoom-controls"><button id="zoom-out" type="button" disabled aria-label="Zoom out">−</button><button id="zoom-reset" type="button" disabled>100%</button><button id="zoom-in" type="button" disabled aria-label="Zoom in">+</button></div>
           <label class="auto-fit"><input id="auto-fit" type="checkbox" checked /><span data-i18n="autoFit">Auto-fit Preview</span></label>
@@ -44,6 +44,6 @@
       </section>
       <footer class="footer"><a href="https://github.com/Copy-TT" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">🛠</span> <span data-i18n="creatorLabel">Creator:</span> Copy_TT</a><span class="footer-divider" aria-hidden="true">·</span><a href="https://ko-fi.com/copy_tt" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">☕</span> <span data-i18n="supportCreator">Support</span></a></footer>
     </main>
-    <script type="module" src="app.js?v=0.7.5"></script>
+    <script type="module" src="app.js?v=0.7.5.1"></script>
   </body>
 </html>
