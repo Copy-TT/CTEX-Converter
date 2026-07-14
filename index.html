@@ -3,37 +3,51 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CTEX Converter v0.1</title>
-    <link rel="stylesheet" href="style.css" />
+    <title>CTEX Converter v0.5</title>
+    <link rel="stylesheet" href="style.css?v=0.5" />
   </head>
   <body>
     <main class="app-shell">
       <header>
         <div>
-          <p class="eyebrow">CTEX CONVERTER · LEGACY RELEASE</p>
-          <h1>CTEX Converter <span>v0.1</span></h1>
+          <p class="eyebrow">BROWSER-BASED · LOCAL ONLY</p>
+          <h1>CTEX Converter <span>v0.5</span></h1>
         </div>
-        <p id="status">Open a CTEX file to begin.</p>
+        <div class="header-actions">
+          <label class="language-select">
+            <span class="sr-only">Language</span>
+            <select id="language-select" aria-label="Language">
+              <option value="en">English</option>
+              <option value="ko">한국어</option>
+              <option value="ja">日本語</option>
+              <option value="zh-CN">简体中文</option>
+            </select>
+          </label>
+          <p id="status" role="status">Open a PNG or supported CTEX file to begin.</p>
+        </div>
       </header>
 
       <section class="workspace">
         <aside class="sidebar">
-          <h2>File</h2>
-          <button id="open-button" type="button">Open CTEX</button>
-          <input id="file-input" type="file" accept=".ctex" hidden />
-
+          <h2 data-i18n="openFiles">Open File</h2>
+          <div class="open-buttons">
+            <button id="open-png" type="button">Open PNG</button>
+            <button id="open-ctex" type="button">Open CTEX</button>
+          </div>
+          <button id="clear-file" type="button" class="clear-button" disabled data-i18n="clearFile">Clear File</button>
+          <input id="png-input" type="file" accept="image/png,.png" hidden />
+          <input id="ctex-input" type="file" accept=".ctex" hidden />
           <dl class="metadata">
-            <div><dt>File name</dt><dd id="info-name">-</dd></div>
-            <div><dt>File size</dt><dd id="info-size">-</dd></div>
-            <div><dt>Format</dt><dd id="info-format">-</dd></div>
-            <div><dt>Header</dt><dd id="info-header">-</dd></div>
-            <div><dt>Resolution</dt><dd id="info-resolution">-</dd></div>
+            <div><dt data-i18n="fileName">Name</dt><dd id="file-name">-</dd></div>
+            <div><dt data-i18n="format">Format</dt><dd id="file-format">-</dd></div>
+            <div><dt data-i18n="fileSize">Size</dt><dd id="file-size">-</dd></div>
+            <div><dt data-i18n="resolution">Resolution</dt><dd id="resolution">-</dd></div>
           </dl>
         </aside>
 
-        <section id="preview-panel" class="preview-panel" aria-label="Image preview">
+        <section id="preview-panel" class="preview-panel" aria-label="Image preview" tabindex="0">
           <div id="drop-zone" class="drop-zone">
-            <strong>Drop CTEX here</strong>
+            <strong data-i18n="dropFiles">Drop PNG or CTEX</strong>
           </div>
           <div id="canvas-wrap" class="canvas-wrap" hidden>
             <canvas id="preview-canvas"></canvas>
@@ -41,12 +55,18 @@
         </section>
 
         <aside class="sidebar tools">
-          <h2>Export</h2>
+          <h2 data-i18n="export">Export File</h2>
           <button id="export-png" type="button" disabled>Export PNG</button>
+          <button id="export-ctex" type="button" disabled>Export CTEX</button>
+          <hr />
+          <div class="zoom-controls">
+            <button id="zoom-out" type="button" disabled aria-label="Zoom out">−</button>
+            <button id="zoom-reset" type="button" disabled>100%</button>
+            <button id="zoom-in" type="button" disabled aria-label="Zoom in">+</button>
+          </div>
         </aside>
       </section>
     </main>
-    <script src="js/ctex.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js?v=0.5"></script>
   </body>
 </html>
