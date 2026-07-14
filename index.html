@@ -3,74 +3,56 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CTEX Converter v0.7</title>
-    <link rel="stylesheet" href="style.css?v=0.7" />
+    <title>CTEX Converter v0.7.1</title>
+    <link rel="stylesheet" href="style.css?v=0.7.1" />
   </head>
   <body>
     <main class="app-shell">
       <header>
         <div>
           <p class="eyebrow">BROWSER-BASED · LOCAL ONLY</p>
-          <h1>CTEX Converter <span>v0.7</span></h1>
+          <h1>CTEX Converter <span>v0.7.1</span></h1>
         </div>
         <div class="header-actions">
-          <label class="language-select">
-            <span class="sr-only">Language</span>
+          <label class="language-select"><span class="sr-only">Language</span>
             <select id="language-select" aria-label="Language">
-              <option value="en">English</option>
-              <option value="ko">한국어</option>
-              <option value="ja">日本語</option>
-              <option value="zh-CN">简体中文</option>
+              <option value="en">English</option><option value="ko">한국어</option><option value="ja">日本語</option><option value="zh-CN">简体中文</option>
             </select>
           </label>
-          <p id="status" role="status">Open an image or supported CTEX file to begin.</p>
+          <p id="status" class="status status-info" role="status"><span id="status-icon" class="status-icon" aria-hidden="true">ⓘ</span><span id="status-text">Open a PNG, JPG, or supported CTEX file to begin.</span></p>
         </div>
       </header>
-
       <section class="workspace">
         <aside class="sidebar">
           <h2 data-i18n="openFiles">Open File</h2>
           <div class="open-buttons">
-            <button id="open-image" type="button">Open Image</button>
+            <button id="open-png" type="button">Open PNG</button>
+            <button id="open-jpg" type="button">Open JPG</button>
             <button id="open-ctex" type="button">Open CTEX</button>
           </div>
           <button id="clear-file" type="button" class="clear-button" disabled data-i18n="clearFile">Clear File</button>
-          <input id="image-input" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg,.jpe,.jfif" hidden />
+          <input id="png-input" type="file" accept="image/png,.png" hidden />
+          <input id="jpg-input" type="file" accept="image/jpeg,.jpg,.jpeg,.jpe,.jfif" hidden />
           <input id="ctex-input" type="file" accept=".ctex" hidden />
           <dl class="metadata">
-            <div><dt data-i18n="fileName">Name</dt><dd id="file-name">-</dd></div>
-            <div><dt data-i18n="format">Format</dt><dd id="file-format">-</dd></div>
-            <div><dt data-i18n="fileSize">Size</dt><dd id="file-size">-</dd></div>
-            <div><dt data-i18n="resolution">Resolution</dt><dd id="resolution">-</dd></div>
+            <div><dt data-i18n="fileName">Name</dt><dd id="file-name">-</dd></div><div><dt data-i18n="format">Format</dt><dd id="file-format">-</dd></div><div><dt data-i18n="fileSize">Size</dt><dd id="file-size">-</dd></div><div><dt data-i18n="resolution">Resolution</dt><dd id="resolution">-</dd></div>
           </dl>
         </aside>
-
         <section id="preview-panel" class="preview-panel" aria-label="Image preview" tabindex="0">
-          <div id="drop-zone" class="drop-zone">
-            <strong data-i18n="dropFiles">Drop an image or CTEX</strong>
-          </div>
-          <div id="canvas-wrap" class="canvas-wrap" hidden>
-            <canvas id="preview-canvas"></canvas>
-          </div>
+          <div id="drop-zone" class="drop-zone"><strong data-i18n="dropFiles">Drop a PNG, JPG, or CTEX</strong></div>
+          <div id="canvas-wrap" class="canvas-wrap" hidden><canvas id="preview-canvas"></canvas></div>
         </section>
-
         <aside class="sidebar tools">
           <h2 data-i18n="export">Export File</h2>
           <button id="export-png" type="button" disabled>Export PNG</button>
+          <button id="export-jpg" type="button" disabled>Export JPG</button>
           <button id="export-ctex" type="button" disabled>Export CTEX</button>
           <hr />
-          <div class="rotation-controls">
-            <button id="rotate-left" type="button" disabled data-i18n="rotateLeft">↶ Rotate Left</button>
-            <button id="rotate-right" type="button" disabled data-i18n="rotateRight">Rotate Right ↷</button>
-          </div>
-          <div class="zoom-controls">
-            <button id="zoom-out" type="button" disabled aria-label="Zoom out">−</button>
-            <button id="zoom-reset" type="button" disabled>100%</button>
-            <button id="zoom-in" type="button" disabled aria-label="Zoom in">+</button>
-          </div>
+          <div class="rotation-controls"><button id="rotate-left" type="button" disabled>↶ Rotate Left</button><button id="rotate-right" type="button" disabled>Rotate Right ↷</button></div>
+          <div class="zoom-controls"><button id="zoom-out" type="button" disabled aria-label="Zoom out">−</button><button id="zoom-reset" type="button" disabled>100%</button><button id="zoom-in" type="button" disabled aria-label="Zoom in">+</button></div>
         </aside>
       </section>
     </main>
-    <script type="module" src="app.js?v=0.7"></script>
+    <script type="module" src="app.js?v=0.7.1"></script>
   </body>
 </html>
