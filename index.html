@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CTEX Converter v0.1</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <div>
+          <p class="eyebrow">CTEX CONVERTER · LEGACY RELEASE</p>
+          <h1>CTEX Converter <span>v0.1</span></h1>
+        </div>
+        <p id="status">Open a CTEX file to begin.</p>
+      </header>
+
+      <section class="workspace">
+        <aside class="sidebar">
+          <h2>File</h2>
+          <button id="open-button" type="button">Open CTEX</button>
+          <input id="file-input" type="file" accept=".ctex" hidden />
+
+          <dl class="metadata">
+            <div><dt>File name</dt><dd id="info-name">-</dd></div>
+            <div><dt>File size</dt><dd id="info-size">-</dd></div>
+            <div><dt>Format</dt><dd id="info-format">-</dd></div>
+            <div><dt>Header</dt><dd id="info-header">-</dd></div>
+            <div><dt>Resolution</dt><dd id="info-resolution">-</dd></div>
+          </dl>
+        </aside>
+
+        <section id="preview-panel" class="preview-panel" aria-label="Image preview">
+          <div id="drop-zone" class="drop-zone">
+            <strong>Drop CTEX here</strong>
+          </div>
+          <div id="canvas-wrap" class="canvas-wrap" hidden>
+            <canvas id="preview-canvas"></canvas>
+          </div>
+        </section>
+
+        <aside class="sidebar tools">
+          <h2>Export</h2>
+          <button id="export-png" type="button" disabled>Export PNG</button>
+        </aside>
+      </section>
+    </main>
+    <script src="js/ctex.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
