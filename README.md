@@ -1,6 +1,6 @@
 # CTEX Converter
 
-**Current version: v0.7.5**
+**Current version: v0.7.6**
 
 [Open CTEX Converter](https://copy-tt.github.io/CTEX-Converter/)
 
@@ -13,12 +13,15 @@ CTEX Converter is a browser-based image viewer and converter for PNG, JPEG, and 
 - Drag and drop a supported file into the Preview area
 - Preview transparent images on a checkerboard background
 - Display the file name, format, size, and resolution
+- Show the original color model and Bit Depth in Format, and valid JPG DPI metadata in Resolution
 - Automatically format file sizes in B, KB, MB, or GB
 - Export any opened image as PNG, JPG, or a newly generated CTEX file
 - Rotate left, rotate right, rotate 180°, flip horizontally, flip vertically, or reset all rotation and flip changes
 - Zoom the Preview in or out by 10 percentage points, reset it to 100%, or automatically fit it to the available space
 - Choose a White, Gray, Black, or Custom JPG background color
 - Enter a Custom JPG background color with RGB or HEX values
+- Open the browser color palette by selecting the JPG color preview
+- View contextual help for JPG Background, Edit, and Zoom
 - Switch between Light Mode and Dark Mode
 - Use the interface in English, Korean, Simplified Chinese, Traditional Chinese, Japanese, or Russian
 - Clear the current file without reloading the page
@@ -38,10 +41,10 @@ Any supported input can be exported to any supported output. For example, a JPG 
 ## How to use it
 
 1. Select **Open PNG**, **Open JPG**, or **Open CTEX**. You can also drop a supported file into the Preview area.
-2. Check the image and its Name, Format, Size, and Resolution.
+2. Check the image and its Name, Format, Size, and Resolution. Format includes the source color model and Bit Depth when they can be identified. Resolution includes DPI only when valid JPG EXIF or JFIF density metadata is available.
 3. If needed, rotate or flip the image. Use **180°** for a half turn or **Reset** to clear all rotation and flip changes.
 4. Adjust the Preview with the `−`, `100%`, and `+` controls. Each `−` or `+` action changes the zoom by 10 percentage points. With **Auto-fit Preview** enabled, the Preview is recalculated when the image or browser window changes. When it is disabled, the Preview returns to and remains at 100% until you change it manually.
-5. When exporting JPG, choose a background preset or enter a Custom RGB or HEX color. JPG does not support transparency, so transparent pixels are composited onto the selected background color.
+5. When exporting JPG, choose a background preset, enter a Custom RGB or HEX color, or select the color preview to open the browser color palette. JPG does not support transparency, so transparent pixels are composited onto the selected background color.
 6. Select **Export PNG**, **Export JPG**, or **Export CTEX**.
 
 On browsers that support the native save-file picker in the current context, you can choose the file name and save location. Otherwise, the browser uses its normal download behavior.
@@ -79,7 +82,7 @@ Light Mode is the default appearance. The selected Light or Dark theme is also r
 
 # CTEX Converter
 
-**현재 버전: v0.7.5**
+**현재 버전: v0.7.6**
 
 [CTEX Converter 열기](https://copy-tt.github.io/CTEX-Converter/)
 
@@ -92,12 +95,15 @@ CTEX Converter는 PNG, JPEG 및 지원되는 Godot CTEX 텍스처 파일을 브�
 - 지원되는 파일을 Preview 영역으로 끌어다 놓아 열기
 - 투명 이미지를 체커보드 배경에서 미리보기
 - 파일 이름, 형식, 크기 및 해상도 표시
+- 형식에 원본 색상 구조와 Bit Depth를 표시하고, 유효한 JPG DPI 메타데이터가 있으면 해상도에 함께 표시
 - 파일 크기를 B, KB, MB 또는 GB 단위로 자동 표시
 - 불러온 모든 이미지를 PNG, JPG 또는 새로 생성한 CTEX 파일로 내보내기
 - 왼쪽 회전, 오른쪽 회전, 180° 회전, 좌우 반전, 상하 반전 및 모든 회전·반전 초기화
 - Preview 배율을 10%p씩 확대·축소하거나 100%로 초기화하고, 사용 가능한 공간에 자동 맞춤
 - JPG 배경색을 흰색, 회색, 검정색 또는 사용자 지정으로 선택
 - 사용자 지정 JPG 배경색을 RGB 또는 HEX 값으로 입력
+- JPG 색상 미리보기를 눌러 브라우저 색상 팔레트 열기
+- JPG 배경색, 편집 및 확대·축소에 대한 상황별 도움말 확인
 - 라이트 모드와 다크 모드 전환
 - English, 한국어, 简体中文, 繁體中文, 日本語, Русский 인터페이스
 - 페이지를 새로고침하지 않고 현재 파일 지우기
@@ -117,10 +123,10 @@ CTEX Converter는 PNG, JPEG 및 지원되는 Godot CTEX 텍스처 파일을 브�
 ## 사용 방법
 
 1. **PNG 열기**, **JPG 열기**, **CTEX 열기** 중 하나를 선택합니다. 지원되는 파일을 Preview 영역으로 끌어다 놓아도 됩니다.
-2. 이미지와 이름, 형식, 크기 및 해상도 정보를 확인합니다.
+2. 이미지와 이름, 형식, 크기 및 해상도 정보를 확인합니다. 판별할 수 있는 경우 형식에 원본 색상 구조와 Bit Depth가 표시됩니다. 유효한 JPG EXIF 또는 JFIF 밀도 메타데이터가 있을 때만 해상도에 DPI가 함께 표시됩니다.
 3. 필요하면 이미지를 회전하거나 반전합니다. **180°** 버튼으로 이미지를 반 바퀴 회전하거나 **초기화** 버튼으로 모든 회전·반전을 초기화할 수 있습니다.
 4. `−`, `100%`, `+` 버튼으로 Preview 배율을 조절합니다. `−`와 `+`를 한 번 누를 때마다 배율이 10%p씩 변경됩니다. **미리보기 자동 맞춤**을 켜면 이미지 또는 브라우저 창의 크기가 바뀔 때 Preview 배율을 다시 계산합니다. 끄면 Preview가 100%로 돌아가며, 이후 직접 변경하기 전까지 100%를 유지합니다.
-5. JPG로 내보낼 때는 배경색 프리셋을 고르거나 사용자 지정 RGB·HEX 색상을 입력합니다. JPG는 투명도를 지원하지 않으므로 투명 픽셀은 선택한 배경색 위에 합성됩니다.
+5. JPG로 내보낼 때는 배경색 프리셋을 고르거나 사용자 지정 RGB·HEX 색상을 입력합니다. 색상 미리보기를 누르면 브라우저 색상 팔레트를 열 수 있습니다. JPG는 투명도를 지원하지 않으므로 투명 픽셀은 선택한 배경색 위에 합성됩니다.
 6. **PNG 내보내기**, **JPG 내보내기**, **CTEX 내보내기** 중 하나를 선택합니다.
 
 현재 실행 환경에서 브라우저의 파일 저장 창을 지원하면 파일 이름과 저장 경로를 선택할 수 있습니다. 지원하지 않는 환경에서는 브라우저의 일반 다운로드 방식으로 저장됩니다.
