@@ -1,4 +1,4 @@
-import { translations } from "./locales.js?v=0.7.6";
+import { translations } from "./locales.js?v=0.7.8";
 
 const CTEX_WEBP_PAYLOAD_OFFSET = 56;
 const CTEX_MAX_DIMENSION = 0xffff;
@@ -27,7 +27,7 @@ const state = {
   flipX: false,
   flipY: false,
   zoom: 1,
-  autoFit: true,
+  autoShrink: true,
   language: getSavedLanguage(),
   theme: getSavedTheme(),
   background: { mode: "white", color: "#ffffff", customColor: "#ffffff" },
@@ -58,7 +58,7 @@ const elements = {
   bgB: $("bg-b"),
   bgHex: $("bg-hex"),
   bgColorPicker: $("bg-color-picker"),
-  autoFit: $("auto-fit"),
+  autoShrink: $("auto-shrink"),
   themeToggle: $("theme-toggle"),
   dropZone: $("drop-zone"),
   previewPanel: $("preview-panel"),
@@ -78,6 +78,8 @@ const elements = {
 };
 const infoButtons = [...document.querySelectorAll("[data-info-button]")];
 const context = elements.canvas.getContext("2d", { alpha: true, willReadFrequently: true });
+let openRequestId = 0;
+let exportInProgress = false;
 
 class StatusError extends Error {
   constructor(key) {
@@ -106,9 +108,9 @@ elements.rotate180.addEventListener("click", () => rotate(180, "rotated180"));
 elements.resetTransform.addEventListener("click", resetTransform);
 elements.flipHorizontal.addEventListener("click", () => flip("x"));
 elements.flipVertical.addEventListener("click", () => flip("y"));
-elements.zoomIn.addEventListener("click", () => setZoom(state.zoom + .1));
-elements.zoomOut.addEventListener("click", () => setZoom(state.zoom - .1));
-elements.zoomReset.addEventListener("click", () => setZoom(1));
+elements.zoomIn.addEventListener("click", () => setManualZoom(state.zoom + .1));
+elements.zoomOut.addEventListener("click", () => setManualZoom(state.zoom - .1));
+elements.zoomReset.addEventListener("click", () => setManualZoom(1));
 elements.languageSelect.addEventListener("change", (event) => setLanguage(event.target.value));
 elements.themeToggle.addEventListener("click", toggleTheme);
 elements.jpgBackground.addEventListener("change", () => setBackgroundMode(elements.jpgBackground.value));
@@ -117,9 +119,9 @@ elements.bgG.addEventListener("input", updateCustomFromRgb);
 elements.bgB.addEventListener("input", updateCustomFromRgb);
 elements.bgHex.addEventListener("input", updateCustomFromHex);
 elements.bgColorPicker.addEventListener("input", () => setCustomBackground(elements.bgColorPicker.value));
-elements.autoFit.addEventListener("change", toggleAutoFit);
+elements.autoShrink.addEventListener("change", toggleAutoShrink);
 window.addEventListener("resize", () => {
-  if (state.file && state.autoFit) setZoom(fitZoom());
+  if (state.file && state.autoShrink) setZoom(calculateAutoShrinkZoom());
 });
 
 for (const name of ["dragenter", "dragover"]) {
@@ -207,29 +209,37 @@ async function openDroppedFile(file) {
   }
   const match = Object.entries(RASTER_FORMATS).find(([, descriptor]) => descriptor.matches(file));
   if (match) await openRasterImage(file, match[0]);
-  else setStatus("unsupportedFile", "error");
+  else {
+    openRequestId++;
+    setStatus("unsupportedFile", "error");
+  }
 }
 
 async function openRasterImage(file, kind) {
   if (!file) return;
+  const requestId = ++openRequestId;
   const descriptor = RASTER_FORMATS[kind];
   try {
     if (!descriptor || !descriptor.matches(file)) throw new StatusError("unsupportedFile");
     const metadataPromise = descriptor.inspect(file).catch(() => ({ format: descriptor.fallbackFormat, dpi: null }));
     const [image, metadata] = await Promise.all([decodeImage(file), metadataPromise]);
+    if (requestId !== openRequestId) return;
     setDocument(file, image, metadata);
     setStatus("opened", "success", { name: file.name });
   } catch (error) {
+    if (requestId !== openRequestId) return;
     setStatus(error instanceof StatusError ? error.key : "imageRead", "error");
   }
 }
 
 async function openCtex(file) {
   if (!file) return;
+  const requestId = ++openRequestId;
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const payload = validateWebpCtex(bytes);
     const image = await decodeImage(new Blob([payload], { type: "image/webp" }));
+    if (requestId !== openRequestId) return;
     if (image.naturalWidth !== readUint32(bytes, 8) || image.naturalHeight !== readUint32(bytes, 12)) throw new StatusError("ctexRead");
     const rgba = readUint32(bytes, 48) === IMAGE_FORMAT_RGBA8;
     const pixelFormat = rgba ? "RGBA8" : "RGB8";
@@ -237,6 +247,7 @@ async function openCtex(file) {
     setDocument(file, image, { format: `CTEX (GST2 / WebP / ${pixelFormat}, ${bitDepth}-bit)`, dpi: null });
     setStatus("opened", "success", { name: file.name });
   } catch (error) {
+    if (requestId !== openRequestId) return;
     setStatus(error instanceof StatusError ? error.key : "ctexRead", "error");
   }
 }
@@ -374,7 +385,7 @@ function setDocument(file, image, metadata) {
   state.flipX = false;
   state.flipY = false;
   updateDimensions();
-  state.zoom = state.autoFit ? fitZoom() : 1;
+  state.zoom = 1;
   render();
   elements.fileName.textContent = file.name;
   elements.fileFormat.textContent = metadata.format;
@@ -385,6 +396,7 @@ function setDocument(file, image, metadata) {
 }
 
 function clearDocument() {
+  openRequestId++;
   state.file = null;
   state.image = null;
   state.sourceWidth = 0;
@@ -465,7 +477,7 @@ function render() {
   context.scale(state.flipX ? -1 : 1, state.flipY ? -1 : 1);
   context.drawImage(state.image, -state.sourceWidth / 2, -state.sourceHeight / 2, state.sourceWidth, state.sourceHeight);
   context.restore();
-  setZoom(state.zoom);
+  setZoom(state.autoShrink ? calculateAutoShrinkZoom() : state.zoom);
   elements.canvasWrap.hidden = false;
 }
 
@@ -476,16 +488,24 @@ function setZoom(zoom) {
   elements.zoomReset.textContent = `${Math.round(state.zoom * 100)}%`;
 }
 
-function fitZoom() {
+function setManualZoom(zoom) {
+  if (state.autoShrink) {
+    state.autoShrink = false;
+    elements.autoShrink.checked = false;
+  }
+  setZoom(zoom);
+}
+
+function calculateAutoShrinkZoom() {
   const availableWidth = Math.max(1, elements.previewPanel.clientWidth - 64);
   const availableHeight = Math.max(1, elements.previewPanel.clientHeight - 64);
   const fit = Math.min(1, Math.max(.1, Math.min(availableWidth / state.width, availableHeight / state.height)));
   return Math.max(.1, Math.floor(fit * 10) / 10);
 }
 
-function toggleAutoFit() {
-  state.autoFit = elements.autoFit.checked;
-  if (state.file) setZoom(state.autoFit ? fitZoom() : 1);
+function toggleAutoShrink() {
+  state.autoShrink = elements.autoShrink.checked;
+  if (state.file) setZoom(state.autoShrink ? calculateAutoShrinkZoom() : 1);
 }
 
 function setBackgroundMode(mode) {
@@ -523,29 +543,47 @@ function updateBackgroundControls() {
   elements.bgColorPicker.value = hex.toLowerCase();
 }
 
-async function exportPng() {
-  try {
+function exportPng() {
+  return runExport(async () => {
     if (await saveExport(`${baseName(state.file.name)}.png`, "image/png", ".png", () => canvasBlob(elements.canvas, "image/png"))) setStatus("pngExported", "success");
-  } catch {
-    setStatus("exportFailed", "error");
-  }
+  });
 }
 
-async function exportJpg() {
-  try {
+function exportJpg() {
+  return runExport(async () => {
     if (await saveExport(`${baseName(state.file.name)}.jpg`, "image/jpeg", ".jpg", createJpgBlob)) setStatus("jpgExported", "success");
-  } catch {
-    setStatus("exportFailed", "error");
-  }
+  });
 }
 
-async function exportCtex() {
-  try {
+function exportCtex() {
+  return runExport(async () => {
     if (state.width > CTEX_MAX_DIMENSION || state.height > CTEX_MAX_DIMENSION) throw new StatusError("dimensionLimit");
     if (await saveExport(`${baseName(state.file.name)}.ctex`, "application/octet-stream", ".ctex", createCtexBlob)) setStatus("ctexExported", "success");
+  });
+}
+
+async function runExport(operation) {
+  if (!beginExport()) return;
+  try {
+    await operation();
   } catch (error) {
     setStatus(error instanceof StatusError ? error.key : "exportFailed", "error");
+  } finally {
+    endExport();
   }
+}
+
+function beginExport() {
+  if (exportInProgress || !state.file) return false;
+  openRequestId++;
+  exportInProgress = true;
+  updateExportButtons();
+  return true;
+}
+
+function endExport() {
+  exportInProgress = false;
+  updateExportButtons();
 }
 
 async function createJpgBlob() {
@@ -685,7 +723,13 @@ function baseName(name) {
 }
 
 function setEnabled(enabled) {
-  for (const element of [elements.clearFile, elements.exportPng, elements.exportJpg, elements.exportCtex, elements.rotateLeft, elements.rotateRight, elements.rotate180, elements.resetTransform, elements.flipHorizontal, elements.flipVertical, elements.zoomIn, elements.zoomOut, elements.zoomReset]) element.disabled = !enabled;
+  for (const element of [elements.clearFile, elements.rotateLeft, elements.rotateRight, elements.rotate180, elements.resetTransform, elements.flipHorizontal, elements.flipVertical, elements.zoomIn, elements.zoomOut, elements.zoomReset]) element.disabled = !enabled;
+  updateExportButtons();
+}
+
+function updateExportButtons() {
+  const disabled = !state.file || exportInProgress;
+  for (const element of [elements.exportPng, elements.exportJpg, elements.exportCtex]) element.disabled = disabled;
 }
 
 function setStatus(key, type = "info", values = {}) {
