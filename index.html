@@ -3,29 +3,35 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CTEX Converter v0.7.8</title>
-    <link rel="stylesheet" href="style.css?v=0.7.8" />
+    <title>CTEX Converter v0.8</title>
+    <link rel="stylesheet" href="style.css?v=0.8" />
   </head>
   <body>
     <main class="app-shell">
       <header>
-          <div><p class="eyebrow" data-i18n="browserLocal">BROWSER-BASED · LOCAL ONLY</p><h1>CTEX Converter <span>v0.7.8</span></h1></div>
+          <div><p class="eyebrow" data-i18n="browserLocal">BROWSER-BASED · LOCAL ONLY</p><h1>CTEX Converter <span>v0.8</span></h1></div>
         <div class="header-actions">
           <div class="header-controls"><label class="language-select"><span class="sr-only" data-i18n="languageLabel">Language</span><select id="language-select" aria-label="Language" data-i18n-aria="languageLabel"><option value="en">English</option><option value="ko">한국어</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ru">Русский</option></select></label><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode">🌙</button></div>
-          <p id="status" class="status status-info" role="status"><span id="status-icon" class="status-icon" aria-hidden="true">ⓘ</span><span id="status-text">Open a PNG, JPG, or supported CTEX file to begin.</span></p>
+          <p id="status" class="status status-info" role="status"><span id="status-icon" class="status-icon" aria-hidden="true">ⓘ</span><span id="status-text">Open images to begin.</span></p>
         </div>
       </header>
       <section class="workspace">
         <aside class="sidebar">
-          <h2 data-i18n="openFiles">Open File</h2>
+          <h2 data-i18n="openFiles">Open Image</h2>
           <div class="open-buttons"><button id="open-png" type="button" data-i18n="openPng">Open PNG</button><button id="open-jpg" type="button" data-i18n="openJpg">Open JPG</button><button id="open-ctex" type="button" data-i18n="openCtex">Open CTEX</button></div>
           <button id="clear-file" type="button" class="clear-button" disabled data-i18n="clearFile">Reset</button>
-          <input id="png-input" type="file" accept="image/png,.png" hidden /><input id="jpg-input" type="file" accept="image/jpeg,.jpg,.jpeg,.jpe,.jfif" hidden /><input id="ctex-input" type="file" accept=".ctex" hidden />
-          <dl class="metadata"><div><dt data-i18n="fileName">Name</dt><dd id="file-name">-</dd></div><div><dt data-i18n="format">Format</dt><dd id="file-format">-</dd></div><div><dt data-i18n="fileSize">Size</dt><dd id="file-size">-</dd></div><div><dt data-i18n="resolution">Resolution</dt><dd id="resolution">-</dd></div></dl>
+          <input id="png-input" type="file" accept="image/png,.png" multiple hidden /><input id="jpg-input" type="file" accept="image/jpeg,.jpg,.jpeg,.jpe,.jfif" multiple hidden /><input id="ctex-input" type="file" accept=".ctex" multiple hidden />
+          <dl class="metadata"><div><dt data-i18n="fileName">Name</dt><dd id="file-name">-</dd></div><div><dt data-i18n="format">Format</dt><dd id="file-format">-</dd></div><div><dt data-i18n="fileSize">Size</dt><dd id="file-size">-</dd></div><div><dt data-i18n="resolution">Resolution</dt><dd id="resolution">-</dd></div><div id="file-error-row" hidden><dt data-i18n="errorLabel">Error</dt><dd id="file-error">-</dd></div></dl>
         </aside>
-        <section id="preview-panel" class="preview-panel" aria-label="Image preview" data-i18n-aria="previewLabel"><div id="drop-zone" class="drop-zone"><strong data-i18n="dropFiles">Drop a file</strong></div><div id="canvas-wrap" class="canvas-wrap" hidden><canvas id="preview-canvas"></canvas></div></section>
+        <section class="preview-column">
+          <div class="preview-heading">
+            <div class="preview-title"><h2 data-i18n="previewTitle">Preview</h2><span class="info-control"><button class="info-button" type="button" aria-expanded="false" aria-describedby="preview-help" data-info-button data-i18n-aria="previewInfoLabel">ⓘ</button><span id="preview-help" class="info-popover" role="tooltip" data-i18n="previewHelp">The border shows the current image, and the checkbox shows which images will be exported. × removes an image from the list without deleting the original. Double-click an image or select View larger to open a single-image preview.</span></span></div>
+            <div class="preview-actions"><button id="select-all" class="secondary-button compact-button" type="button" hidden data-i18n="selectAll">Select all</button><button id="view-larger" class="secondary-button compact-button" type="button" hidden data-i18n="viewLarger">View larger</button><button id="back-list" class="secondary-button compact-button" type="button" hidden data-i18n="backToList">← Back to list</button></div>
+          </div>
+          <section id="preview-panel" class="preview-panel" aria-label="Image preview" data-i18n-aria="previewLabel"><div id="drop-zone" class="drop-zone"><strong data-i18n="dropFiles">Drag &amp; Drop Images</strong></div><div id="gallery" class="gallery" hidden></div><div id="preview-loading" class="preview-loading" hidden data-i18n="loadingPreview">Loading preview…</div><div id="canvas-wrap" class="canvas-wrap" hidden><canvas id="preview-canvas"></canvas></div></section>
+        </section>
         <aside class="sidebar tools">
-          <h2 data-i18n="export">Export File</h2>
+          <h2 data-i18n="export">Export Image</h2>
           <button id="export-png" type="button" disabled data-i18n="exportPng">Export PNG</button><button id="export-jpg" type="button" disabled data-i18n="exportJpg">Export JPG</button><button id="export-ctex" type="button" disabled data-i18n="exportCtex">Export CTEX</button>
           <section class="export-settings" aria-label="Export settings" data-i18n-aria="exportSettings">
             <div class="section-heading">
@@ -36,17 +42,17 @@
             <div class="color-inputs"><label>R<input id="bg-r" type="number" min="0" max="255" inputmode="numeric" value="255" /></label><label>G<input id="bg-g" type="number" min="0" max="255" inputmode="numeric" value="255" /></label><label>B<input id="bg-b" type="number" min="0" max="255" inputmode="numeric" value="255" /></label><label>HEX<input id="bg-hex" type="text" value="#FFFFFF" maxlength="7" spellcheck="false" /></label></div>
           </section>
           <hr />
-          <div class="section-heading tool-section-heading"><span data-i18n="editTitle">Edit</span><span class="info-control"><button class="info-button" type="button" aria-expanded="false" aria-describedby="edit-help" data-info-button data-i18n-aria="editInfoLabel">ⓘ</button><span id="edit-help" class="info-popover" role="tooltip" data-i18n="editHelp">Rotation and flip changes are applied when exporting PNG, JPG, and CTEX files.</span></span></div>
+          <div class="section-heading tool-section-heading"><span data-i18n="editTitle">Edit</span><span class="info-control"><button class="info-button" type="button" aria-expanded="false" aria-describedby="edit-help" data-info-button data-i18n-aria="editInfoLabel">ⓘ</button><span id="edit-help" class="info-popover" role="tooltip" data-i18n="editHelp">Rotation and flip changes are applied when exporting images.</span></span></div>
           <div class="transform-controls"><button id="rotate-left" type="button" disabled>↶</button><button id="rotate-right" type="button" disabled>↷</button><button id="flip-horizontal" type="button" disabled>⇋</button><button id="flip-vertical" type="button" disabled>⇅</button></div>
           <div class="transform-actions"><button id="rotate-180" type="button" disabled>180°</button><button id="reset-transform" type="button" disabled data-i18n="resetLabel">Restore</button></div>
           <hr />
-          <div class="section-heading tool-section-heading"><span data-i18n="zoomTitle">Zoom</span><span class="info-control"><button class="info-button" type="button" aria-expanded="false" aria-describedby="zoom-help" data-info-button data-i18n-aria="zoomInfoLabel">ⓘ</button><span id="zoom-help" class="info-popover" role="tooltip" data-i18n="zoomHelp">Zoom applies only to the preview and does not affect rotation, flips, or exported files. Auto-shrink large images adjusts the zoom between 10% and 100% to fit the image within the preview area as closely as possible. It recalculates when the window size or image orientation changes, and turns off when you use a zoom control.</span></span></div>
+          <div class="section-heading tool-section-heading"><span data-i18n="zoomTitle">Zoom</span><span class="info-control"><button class="info-button" type="button" aria-expanded="false" aria-describedby="zoom-help" data-info-button data-i18n-aria="zoomInfoLabel">ⓘ</button><span id="zoom-help" class="info-popover info-popover-paragraphs" role="tooltip"><span data-i18n="zoomHelpPreview">Zoom applies only to the preview and does not affect rotation, flips, or exported files.</span><span data-i18n="zoomHelpAutoShrink">Auto-shrink large images adjusts the zoom between 10% and 100% to fit the image within the preview area as closely as possible.</span></span></span></div>
           <div class="zoom-controls"><button id="zoom-out" type="button" disabled aria-label="Zoom out">−</button><button id="zoom-reset" type="button" disabled>100%</button><button id="zoom-in" type="button" disabled aria-label="Zoom in">+</button></div>
           <label class="auto-shrink"><input id="auto-shrink" type="checkbox" checked /><span data-i18n="autoShrink">Auto-shrink large images</span></label>
         </aside>
       </section>
       <footer class="footer"><a href="https://github.com/Copy-TT" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">🛠</span> <span data-i18n="creatorLabel">Creator:</span> Copy_TT</a><span class="footer-divider" aria-hidden="true">·</span><a href="https://ko-fi.com/copy_tt" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">☕</span> <span data-i18n="supportCreator">Support on Ko-fi</span></a></footer>
     </main>
-    <script type="module" src="app.js?v=0.7.8"></script>
+    <script type="module" src="app.js?v=0.8"></script>
   </body>
 </html>
