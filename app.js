@@ -1,4 +1,4 @@
-import { translations } from "./locales.js?v=0.8";
+import { translations } from "./locales.js?v=0.8c";
 
 const CTEX_WEBP_PAYLOAD_OFFSET = 56;
 const CTEX_MAX_DIMENSION = 0xffff;
@@ -564,6 +564,7 @@ function renderPreview() {
 function renderGallery() {
   if (!elements.gallery || state.view !== "gallery") return;
   elements.gallery.replaceChildren();
+  elements.gallery.className = `gallery ${getGalleryLayoutClass()}`;
   for (const documentRecord of state.documents) {
     const tile = document.createElement("article");
     tile.className = "gallery-item";
@@ -639,6 +640,29 @@ function renderGallery() {
     if (badge) tile.append(badge);
     elements.gallery.append(tile);
   }
+}
+
+function getGalleryLayoutClass() {
+  const count = state.documents.length;
+  if (count <= 1) return "gallery-single";
+  if (count === 2) {
+    const shapes = state.documents.map(getGalleryShape);
+    if (shapes.every((shape) => shape === "wide")) return "gallery-two-wide";
+    if (shapes.every((shape) => shape === "tall")) return "gallery-two-tall";
+    return "gallery-two-equal";
+  }
+  if (count <= 6) return "gallery-columns-2";
+  if (count <= 12) return "gallery-columns-3";
+  return "gallery-columns-4";
+}
+
+function getGalleryShape(documentRecord) {
+  if (!documentRecord.sourceWidth || !documentRecord.sourceHeight) return "standard";
+  const { width, height } = getDocumentDimensions(documentRecord);
+  const ratio = width / height;
+  if (ratio >= 1.25) return "wide";
+  if (ratio <= .8) return "tall";
+  return "standard";
 }
 
 function createGalleryBadge(documentRecord) {
