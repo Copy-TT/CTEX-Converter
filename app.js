@@ -1,4 +1,4 @@
-import { translations } from "./locales.js?v=0.8d";
+import { translations } from "./locales.js?v=0.8e";
 
 const CTEX_WEBP_PAYLOAD_OFFSET = 56;
 const CTEX_MAX_DIMENSION = 0xffff;
@@ -8,6 +8,8 @@ const IMAGE_FORMAT_RGBA8 = 5;
 const JPEG_METADATA_LIMIT = 2 * 1024 * 1024;
 const MAX_FILES = 20;
 const MAX_THUMBNAIL_SIZE = 640;
+const MIN_GALLERY_TILE_HEIGHT = 140;
+const MIN_GALLERY_TILE_WIDTH = 140;
 const ZIP_UINT32_MAX = 0xffffffff;
 const JPEG_SOF_MARKERS = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
 const JPG_EXTENSION = /\.(jpg|jpeg|jpe|jfif)$/i;
@@ -140,6 +142,7 @@ elements.autoShrink.addEventListener("change", toggleAutoShrink);
 
 window.addEventListener("resize", () => {
   if (state.view === "detail" && state.activeImage && state.autoShrink) setZoom(calculateAutoShrinkZoom());
+  if (state.view === "gallery" && state.documents.length) updateGalleryLayout();
   positionOpenInfoPopovers();
 });
 window.addEventListener("scroll", positionOpenInfoPopovers, true);
@@ -564,7 +567,7 @@ function renderPreview() {
 function renderGallery() {
   if (!elements.gallery || state.view !== "gallery") return;
   elements.gallery.replaceChildren();
-  elements.gallery.className = `gallery ${getGalleryLayoutClass()}`;
+  updateGalleryLayout();
   for (const documentRecord of state.documents) {
     const tile = document.createElement("article");
     tile.className = "gallery-item";
@@ -642,27 +645,71 @@ function renderGallery() {
   }
 }
 
-function getGalleryLayoutClass() {
-  const count = state.documents.length;
-  if (count <= 1) return "gallery-single";
-  if (count === 2) {
-    const shapes = state.documents.map(getGalleryShape);
-    if (shapes.every((shape) => shape === "wide")) return "gallery-two-wide";
-    if (shapes.every((shape) => shape === "tall")) return "gallery-two-tall";
-    return "gallery-two-equal";
+function updateGalleryLayout() {
+  const layout = getGalleryLayout();
+  elements.gallery.className = `gallery ${layout.className}`;
+  elements.gallery.style.removeProperty("--gallery-columns");
+  elements.gallery.style.removeProperty("--gallery-rows");
+  if (layout.className === "gallery-auto") {
+    elements.gallery.style.setProperty("--gallery-columns", layout.columns);
+    elements.gallery.style.setProperty("--gallery-rows", layout.rows);
   }
-  if (count <= 6) return "gallery-columns-2";
-  if (count <= 12) return "gallery-columns-3";
-  return "gallery-columns-4";
 }
 
-function getGalleryShape(documentRecord) {
-  if (!documentRecord.sourceWidth || !documentRecord.sourceHeight) return "standard";
+function getGalleryLayout() {
+  const count = state.documents.length;
+  if (count <= 1) return { className: "gallery-single", columns: 1, rows: 1 };
+  if (count === 2) {
+    const shapes = state.documents.map(getExtremeGalleryShape);
+    if (shapes.every((shape) => shape === "wide")) return { className: "gallery-two-wide", columns: 1, rows: 2 };
+    if (shapes.every((shape) => shape === "tall")) return { className: "gallery-two-tall", columns: 2, rows: 1 };
+  }
+  const { width, height, gap } = getGalleryAvailableSize();
+  const { columns, rows } = calculateAutomaticGrid(count, width, height, gap);
+  return { className: "gallery-auto", columns, rows };
+}
+
+function getExtremeGalleryShape(documentRecord) {
+  if (!documentRecord.sourceWidth || !documentRecord.sourceHeight) return null;
   const { width, height } = getDocumentDimensions(documentRecord);
-  const ratio = width / height;
-  if (ratio >= 1.25) return "wide";
-  if (ratio <= .8) return "tall";
-  return "standard";
+  if (width >= height * 2) return "wide";
+  if (height >= width * 2) return "tall";
+  return null;
+}
+
+function getGalleryAvailableSize() {
+  const panelStyle = getComputedStyle(elements.previewPanel);
+  const galleryStyle = getComputedStyle(elements.gallery);
+  const pixels = (value) => parseFloat(value) || 0;
+  const horizontalPadding = pixels(panelStyle.paddingLeft) + pixels(panelStyle.paddingRight);
+  const verticalPadding = pixels(panelStyle.paddingTop) + pixels(panelStyle.paddingBottom);
+  return {
+    width: Math.max(1, elements.previewPanel.clientWidth - horizontalPadding),
+    height: Math.max(1, elements.previewPanel.clientHeight - verticalPadding),
+    gap: pixels(galleryStyle.columnGap) || 16
+  };
+}
+
+function calculateAutomaticGrid(count, width, height, gap = 16) {
+  const safeCount = Math.max(1, count);
+  const safeWidth = Math.max(1, width);
+  const safeHeight = Math.max(1, height);
+  const widthLimitedColumns = Math.max(1, Math.floor((safeWidth + gap) / (MIN_GALLERY_TILE_WIDTH + gap)));
+  const maximumColumns = Math.max(1, Math.min(safeCount, widthLimitedColumns));
+  let best = null;
+  for (let columns = 1; columns <= maximumColumns; columns++) {
+    const rows = Math.ceil(safeCount / columns);
+    const cellWidth = Math.max(1, (safeWidth - gap * (columns - 1)) / columns);
+    const fittedHeight = (safeHeight - gap * (rows - 1)) / rows;
+    const cellHeight = Math.max(MIN_GALLERY_TILE_HEIGHT, fittedHeight);
+    const aspectPenalty = Math.abs(Math.log(cellWidth / cellHeight));
+    const emptyRatio = (columns * rows - safeCount) / (columns * rows);
+    const score = aspectPenalty + emptyRatio * .35;
+    if (!best || score < best.score - 1e-9 || Math.abs(score - best.score) <= 1e-9 && emptyRatio < best.emptyRatio) {
+      best = { columns, rows, score, emptyRatio };
+    }
+  }
+  return { columns: best.columns, rows: best.rows };
 }
 
 function createGalleryBadge(documentRecord) {
