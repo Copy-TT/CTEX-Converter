@@ -251,7 +251,7 @@ function positionInfoPopover(control) {
 }
 
 function handleFileInput(event, expectedKind) {
-  const files = event.target.files;
+  const files = [...event.target.files];
   event.target.value = "";
   return openFiles(files, expectedKind);
 }
