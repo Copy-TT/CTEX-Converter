@@ -20,16 +20,14 @@ Any supported input can be exported as PNG, JPG, or a newly generated CTEX image
 
 ### Key features
 
-- Open up to 20 images at once with dedicated buttons or drag and drop. Opening a new set replaces the current work.
-- Browse multiple images in an ordered grid that recalculates its rows and columns from the current preview size. When exactly two images are both at least twice as wide as tall, they are stacked; when both are at least twice as tall as wide, they are placed side by side. Every other set uses the same automatic layout, with equal-sized cards and a minimum readable width. The border identifies the current image, while checkboxes choose which images to export. Double-click a thumbnail or select **View larger** for a full preview.
-- View each image's name, format, size, resolution, identifiable color model and Bit Depth, plus valid JPEG DPI metadata when available.
-- Rotate left, rotate right or 180°, and flip horizontally or vertically. Edits are stored separately for each image and included in its exported result.
-- Zoom a large preview in 10-percentage-point steps or automatically shrink large images to stay within the preview area. Preview zoom never changes exported images or their resolution.
-- Export one checked image directly. Two or more checked images are placed in an uncompressed ZIP named with the local date and time, such as `2026-07-18_17-21-13.zip`.
-- Continue a batch when an individual conversion fails, and show progress plus final success and failure counts in the status area.
-- Export JPG at the browser encoder's maximum quality setting (100%). JPEG remains a lossy format, so this setting does not guarantee lossless output.
-- Fill transparent areas for JPG export with a White, Gray, Black, or Custom background selected through RGB, HEX, or the browser color palette. This setting does not affect PNG or CTEX exports.
-- Switch between Light and Dark themes. The selected theme and interface language are remembered in local browser storage.
+- **Batch conversion** — Open up to 20 PNG, JPEG, or CTEX images with dedicated buttons or drag and drop. Opening a new set replaces the current work.
+- **Adaptive gallery** — Browse images in their original order through equal-sized square thumbnails. Rows and columns automatically adjust to the preview area to minimize scrolling, while borders and checkboxes identify the current image and the images selected for export.
+- **Image information** — View each image's name, format, size, resolution, identifiable color model and Bit Depth, plus valid JPEG DPI metadata when available.
+- **Per-image editing** — Rotate left, right, or 180°, and flip horizontally or vertically. Each image keeps its own edit state, which is applied to its exported result.
+- **Preview controls** — Zoom a large preview in 10-percentage-point steps or automatically shrink large images. Preview zoom never changes exported images or their resolution.
+- **Flexible export** — Download one checked image directly or place multiple checked images in an uncompressed, timestamped ZIP. A batch continues if an individual conversion fails and reports its progress and final results in the status area.
+- **JPG controls** — Export at the browser encoder's maximum quality setting (100%) and fill transparent areas with a White, Gray, Black, or Custom background selected through RGB, HEX, or the browser color palette. JPEG remains a lossy format, and the background setting does not affect PNG or CTEX exports.
+- **Personal settings** — Switch between Light and Dark themes. The selected theme and interface language are remembered in local browser storage.
 
 ### Basic usage
 
@@ -64,16 +62,14 @@ If the browser allows the native save-file picker in the current context, you ca
 
 ### 주요 기능
 
-- 전용 버튼이나 드래그 앤드 드롭으로 이미지를 한 번에 최대 20개까지 열 수 있습니다. 새로운 이미지들을 열면 기존 작업은 교체됩니다.
-- 여러 이미지를 현재 미리보기 크기에 맞춰 행과 열을 다시 계산하는 순서 보존 격자에서 확인할 수 있습니다. 정확히 두 장이 모두 가로가 세로보다 2배 이상 길면 위아래로, 모두 세로가 가로보다 2배 이상 길면 좌우로 배치합니다. 그 밖의 모든 조합은 동일한 크기의 카드와 읽기 가능한 최소 너비를 유지하는 자동 배열을 사용합니다. 테두리는 현재 이미지를 나타내며 체크박스로 내보낼 이미지를 정합니다. 썸네일을 더블 클릭하거나 **크게 보기**를 선택하면 큰 미리보기를 열 수 있습니다.
-- 각 이미지의 이름, 형식, 크기, 해상도, 판별 가능한 색상 구조와 Bit Depth를 표시하며, 유효한 JPEG DPI 메타데이터가 있으면 함께 보여 줍니다.
-- 이미지를 왼쪽·오른쪽·180°로 회전하거나 좌우·상하로 반전할 수 있습니다. 편집 상태는 이미지마다 별도로 보존되며 내보내는 결과에 반영됩니다.
-- 큰 미리보기 배율을 10%p씩 조절하거나 큰 이미지가 미리보기 영역을 벗어나지 않도록 자동으로 축소할 수 있습니다. 미리보기 확대·축소는 내보내는 이미지와 해상도에 영향을 주지 않습니다.
-- 체크된 이미지가 하나면 직접 내보내고, 두 개 이상이면 `2026-07-18_17-21-13.zip`과 같이 현지 날짜와 시간으로 이름을 정한 무압축 ZIP에 담아 내보냅니다.
-- 일부 이미지의 변환이 실패해도 나머지 작업을 계속하며, 우측 상단에서 진행률과 최종 성공·실패 개수를 확인할 수 있습니다.
-- JPG는 브라우저 인코더의 최대 품질 설정(100%)으로 내보냅니다. JPEG 자체는 손실 압축 형식이므로 이 설정이 무손실 결과를 보장하지는 않습니다.
-- JPG 내보내기 시 투명 영역을 흰색, 회색, 검정색 또는 사용자 지정 배경색으로 채울 수 있습니다. 사용자 지정 색상은 RGB, HEX 또는 브라우저 색상 팔레트로 선택하며 PNG·CTEX 내보내기에는 적용되지 않습니다.
-- 라이트·다크 테마를 전환할 수 있으며, 선택한 테마와 인터페이스 언어는 브라우저 로컬 저장소에 기억됩니다.
+- **다중 이미지 변환** — 전용 버튼이나 드래그 앤드 드롭으로 PNG, JPEG 또는 CTEX 이미지를 한 번에 최대 20개까지 열 수 있습니다. 새로운 이미지들을 열면 기존 작업은 교체됩니다.
+- **자동 갤러리** — 여러 이미지를 원래 순서대로 동일한 크기의 정사각형 썸네일에 표시합니다. 스크롤을 최소화하도록 미리보기 영역에 맞춰 행과 열을 자동으로 조절하며, 테두리와 체크박스로 현재 이미지와 내보낼 이미지를 구분합니다.
+- **이미지 정보** — 각 이미지의 이름, 형식, 크기, 해상도, 판별 가능한 색상 구조와 Bit Depth를 표시하며, 유효한 JPEG DPI 메타데이터가 있으면 함께 보여 줍니다.
+- **개별 이미지 편집** — 이미지를 왼쪽·오른쪽·180°로 회전하거나 좌우·상하로 반전할 수 있습니다. 각 이미지의 편집 상태는 별도로 보존되어 내보내는 결과에 반영됩니다.
+- **미리보기 조절** — 큰 미리보기 배율을 10%p씩 조절하거나 큰 이미지를 자동으로 축소할 수 있습니다. 미리보기 확대·축소는 내보내는 이미지와 해상도에 영향을 주지 않습니다.
+- **유연한 내보내기** — 체크된 이미지 하나는 직접 다운로드하고, 여러 이미지는 날짜와 시간을 이름으로 사용한 무압축 ZIP에 담아 내보냅니다. 일부 변환이 실패해도 나머지 작업을 계속하며 진행 상황과 최종 결과를 상태 영역에 표시합니다.
+- **JPG 설정** — 브라우저 인코더의 최대 품질 설정(100%)으로 내보내고, 투명 영역을 흰색, 회색, 검정색 또는 RGB·HEX·색상 팔레트로 지정한 사용자 색상으로 채울 수 있습니다. JPEG는 손실 압축 형식이며 배경색 설정은 PNG·CTEX 내보내기에 적용되지 않습니다.
+- **개인 설정** — 라이트·다크 테마를 전환할 수 있으며, 선택한 테마와 인터페이스 언어는 브라우저 로컬 저장소에 기억됩니다.
 
 ### 기본 사용법
 
