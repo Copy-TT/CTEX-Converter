@@ -1,4 +1,4 @@
-import { translations } from "./locales.js?v=0.8f";
+import { translations } from "./locales.js?v=0.8g";
 
 const CTEX_WEBP_PAYLOAD_OFFSET = 56;
 const CTEX_MAX_DIMENSION = 0xffff;
@@ -8,12 +8,7 @@ const IMAGE_FORMAT_RGBA8 = 5;
 const JPEG_METADATA_LIMIT = 2 * 1024 * 1024;
 const MAX_FILES = 20;
 const MAX_THUMBNAIL_SIZE = 640;
-const GALLERY_CARD_CAPTION_ALLOWANCE = 26;
-const GALLERY_LAYOUT_HYSTERESIS_MIN = 24;
-const GALLERY_LAYOUT_HYSTERESIS_RATIO = .08;
 const GALLERY_RESIZE_DELAY = 120;
-const MAX_GALLERY_TILE_SIZE = 640;
-const MIN_GALLERY_TILE_SIZE = 140;
 const ZIP_UINT32_MAX = 0xffffffff;
 const JPEG_SOF_MARKERS = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
 const JPG_EXTENSION = /\.(jpg|jpeg|jpe|jfif)$/i;
@@ -37,7 +32,6 @@ const state = {
   detailFromList: false,
   galleryScrollTop: 0,
   galleryScrollLeft: 0,
-  galleryLayout: null,
   activeImage: null,
   activeImageId: null,
   zoom: 1,
@@ -106,6 +100,7 @@ let documentId = 0;
 let exportInProgress = false;
 let dragDepth = 0;
 let galleryResizeTimer = 0;
+let galleryScaleFrame = 0;
 
 class StatusError extends Error {
   constructor(key) {
@@ -561,10 +556,12 @@ function renderApplication() {
 
 function renderPreview() {
   const isEmpty = state.documents.length === 0;
+  const galleryVisible = state.view === "gallery" && !isEmpty;
   elements.dropZone.hidden = !isEmpty || state.opening;
-  elements.gallery.hidden = state.view !== "gallery" || isEmpty;
+  elements.gallery.hidden = !galleryVisible;
   elements.previewLoading.hidden = state.view !== "detail" || Boolean(state.activeImage);
   elements.canvasWrap.hidden = state.view !== "detail" || !state.activeImage;
+  elements.previewPanel.classList.toggle("gallery-view", galleryVisible);
   if (state.view === "gallery") renderGallery();
   if (state.view === "detail" && state.activeImage) renderCanvas();
   updatePreviewActions();
@@ -577,6 +574,7 @@ function renderGallery() {
   for (const documentRecord of state.documents) {
     const tile = document.createElement("article");
     tile.className = "gallery-item";
+    tile.dataset.documentId = String(documentRecord.id);
     if (documentRecord.id === state.selectedId) tile.classList.add("selected");
     if (documentRecord.errorKey) tile.classList.add("has-error");
     if (documentRecord.exportState !== "idle") tile.classList.add(`export-${documentRecord.exportState}`);
@@ -652,15 +650,15 @@ function renderGallery() {
 }
 
 function updateGalleryLayout() {
-  const layout = getGalleryLayout();
-  elements.gallery.className = `gallery ${layout.className}`;
+  const count = state.documents.length;
+  const multiple = count >= 2;
+  elements.gallery.className = `gallery ${multiple ? "gallery-multiple" : "gallery-single"}`;
   elements.gallery.style.removeProperty("--gallery-columns");
-  elements.gallery.style.removeProperty("--gallery-tile-size");
-  if (layout.className === "gallery-auto") {
-    elements.gallery.style.setProperty("--gallery-columns", layout.columns);
-    elements.gallery.style.setProperty("--gallery-tile-size", `${layout.tileSize}px`);
+  if (multiple) {
+    const { width, height, gap } = getGalleryAvailableSize();
+    elements.gallery.style.setProperty("--gallery-columns", calculateGalleryColumns(count, width, height, gap));
   }
-  state.galleryLayout = { ...layout, count: state.documents.length };
+  scheduleGalleryThumbnailScaleUpdate();
 }
 
 function scheduleGalleryLayoutUpdate() {
@@ -669,30 +667,6 @@ function scheduleGalleryLayoutUpdate() {
     galleryResizeTimer = 0;
     if (state.view === "gallery" && state.documents.length) updateGalleryLayout();
   }, GALLERY_RESIZE_DELAY);
-}
-
-function getGalleryLayout() {
-  const count = state.documents.length;
-  if (count <= 1) return { className: "gallery-single", columns: 1, rows: 1 };
-  if (count === 2) {
-    const shapes = state.documents.map(getExtremeGalleryShape);
-    if (shapes.every((shape) => shape === "wide")) return { className: "gallery-two-wide", columns: 1, rows: 2 };
-    if (shapes.every((shape) => shape === "tall")) return { className: "gallery-two-tall", columns: 2, rows: 1 };
-  }
-  const { width, height, gap } = getGalleryAvailableSize();
-  const previousLayout = state.galleryLayout?.className === "gallery-auto" && state.galleryLayout.count === count
-    ? state.galleryLayout
-    : null;
-  const { columns, rows, tileSize } = calculateAutomaticGrid(count, width, height, gap, previousLayout);
-  return { className: "gallery-auto", columns, rows, tileSize };
-}
-
-function getExtremeGalleryShape(documentRecord) {
-  if (!documentRecord.sourceWidth || !documentRecord.sourceHeight) return null;
-  const { width, height } = getDocumentDimensions(documentRecord);
-  if (width >= height * 2) return "wide";
-  if (height >= width * 2) return "tall";
-  return null;
 }
 
 function getGalleryAvailableSize() {
@@ -708,44 +682,55 @@ function getGalleryAvailableSize() {
   };
 }
 
-function calculateAutomaticGrid(count, width, height, gap = 16, previousLayout = null) {
+function calculateGalleryColumns(count, width, height, gap = 16) {
   const safeCount = Math.max(1, count);
   const safeWidth = Math.max(1, width);
   const safeHeight = Math.max(1, height);
-  const candidates = [];
-  for (let columns = 1; columns <= safeCount; columns++) {
+  const minimumColumns = Math.min(2, safeCount);
+  let best = null;
+
+  for (let columns = minimumColumns; columns <= safeCount; columns++) {
     const rows = Math.ceil(safeCount / columns);
-    const widthLimit = (safeWidth - gap * (columns - 1)) / columns;
-    const heightLimit = (safeHeight - gap * (rows - 1) - GALLERY_CARD_CAPTION_ALLOWANCE * rows) / rows;
-    const fittedSize = Math.max(1, Math.min(widthLimit, heightLimit));
-    const emptyRatio = (columns * rows - safeCount) / (columns * rows);
-    candidates.push({ columns, rows, fittedSize, emptyRatio });
-  }
-
-  candidates.sort((left, right) =>
-    right.fittedSize - left.fittedSize
-    || left.emptyRatio - right.emptyRatio
-    || Math.abs(left.columns - left.rows) - Math.abs(right.columns - right.rows)
-    || left.columns - right.columns
-  );
-
-  let selected = candidates[0];
-  if (previousLayout) {
-    const previous = candidates.find((candidate) => candidate.columns === previousLayout.columns);
-    if (previous) {
-      const improvement = selected.fittedSize - previous.fittedSize;
-      const threshold = Math.max(GALLERY_LAYOUT_HYSTERESIS_MIN, previous.fittedSize * GALLERY_LAYOUT_HYSTERESIS_RATIO);
-      const previousFitsMinimum = previous.fittedSize >= MIN_GALLERY_TILE_SIZE;
-      const selectedRestoresMinimum = selected.fittedSize >= MIN_GALLERY_TILE_SIZE;
-      if (improvement <= threshold && (previousFitsMinimum || !selectedRestoresMinimum)) selected = previous;
+    const tileSize = Math.max(1, (safeWidth - gap * (columns - 1)) / columns);
+    const contentHeight = rows * tileSize + gap * (rows - 1);
+    const overflow = Math.max(0, contentHeight - safeHeight);
+    const candidate = { columns, tileSize, overflow };
+    if (
+      !best
+      || candidate.overflow < best.overflow - 1
+      || Math.abs(candidate.overflow - best.overflow) <= 1 && candidate.tileSize > best.tileSize
+    ) {
+      best = candidate;
     }
   }
 
-  return {
-    columns: selected.columns,
-    rows: selected.rows,
-    tileSize: Math.round(Math.min(MAX_GALLERY_TILE_SIZE, Math.max(MIN_GALLERY_TILE_SIZE, selected.fittedSize)))
-  };
+  return best.columns;
+}
+
+function scheduleGalleryThumbnailScaleUpdate() {
+  if (galleryScaleFrame) cancelAnimationFrame(galleryScaleFrame);
+  galleryScaleFrame = requestAnimationFrame(() => {
+    galleryScaleFrame = 0;
+    updateGalleryThumbnailScales();
+  });
+}
+
+function updateGalleryThumbnailScales() {
+  if (state.view !== "gallery") return;
+  for (const tile of elements.gallery.querySelectorAll(".gallery-item")) {
+    const documentRecord = state.documents.find((item) => item.id === Number(tile.dataset.documentId));
+    const thumbnail = tile.querySelector(".gallery-thumbnail");
+    const image = thumbnail?.querySelector("img");
+    if (!documentRecord || !thumbnail || !image) continue;
+
+    const rotated = Math.abs(documentRecord.rotation % 180) === 90;
+    const boundingWidth = rotated ? documentRecord.sourceHeight : documentRecord.sourceWidth;
+    const boundingHeight = rotated ? documentRecord.sourceWidth : documentRecord.sourceHeight;
+    const fit = Math.min(thumbnail.clientWidth / boundingWidth, thumbnail.clientHeight / boundingHeight);
+    const scale = state.autoShrink ? Math.min(1, Math.max(.1, fit)) : 1;
+    image.style.width = `${Math.max(1, Math.round(documentRecord.sourceWidth * scale))}px`;
+    image.style.height = `${Math.max(1, Math.round(documentRecord.sourceHeight * scale))}px`;
+  }
 }
 
 function createGalleryBadge(documentRecord) {
@@ -1008,6 +993,7 @@ function calculateAutoShrinkZoom() {
 function toggleAutoShrink() {
   state.autoShrink = elements.autoShrink.checked;
   if (state.view === "detail" && state.activeImage) setZoom(state.autoShrink ? calculateAutoShrinkZoom() : 1);
+  if (state.view === "gallery") scheduleGalleryThumbnailScaleUpdate();
 }
 
 function setBackgroundMode(mode) {
@@ -1338,6 +1324,10 @@ function resetDocumentState() {
     clearTimeout(galleryResizeTimer);
     galleryResizeTimer = 0;
   }
+  if (galleryScaleFrame) {
+    cancelAnimationFrame(galleryScaleFrame);
+    galleryScaleFrame = 0;
+  }
   for (const documentRecord of state.documents) if (documentRecord.thumbnailUrl) URL.revokeObjectURL(documentRecord.thumbnailUrl);
   state.documents = [];
   state.selectedId = null;
@@ -1345,7 +1335,6 @@ function resetDocumentState() {
   state.detailFromList = false;
   state.galleryScrollTop = 0;
   state.galleryScrollLeft = 0;
-  state.galleryLayout = null;
   state.activeImage = null;
   state.activeImageId = null;
   state.zoom = 1;
