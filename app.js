@@ -1,4 +1,4 @@
-import { translations } from "./locales.js?v=0.8g";
+import { translations } from "./locales.js?v=0.8h";
 
 const CTEX_WEBP_PAYLOAD_OFFSET = 56;
 const CTEX_MAX_DIMENSION = 0xffff;
@@ -45,6 +45,7 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const elements = {
+  appShell: document.querySelector(".app-shell"),
   openPng: $("open-png"),
   openJpg: $("open-jpg"),
   openCtex: $("open-ctex"),
@@ -90,7 +91,8 @@ const elements = {
   zoomIn: $("zoom-in"),
   zoomOut: $("zoom-out"),
   zoomReset: $("zoom-reset"),
-  languageSelect: $("language-select")
+  languageSelect: $("language-select"),
+  footer: document.querySelector(".footer")
 };
 const infoButtons = [...document.querySelectorAll("[data-info-button]")];
 const context = elements.canvas.getContext("2d", { alpha: true, willReadFrequently: true });
@@ -672,12 +674,21 @@ function scheduleGalleryLayoutUpdate() {
 function getGalleryAvailableSize() {
   const panelStyle = getComputedStyle(elements.previewPanel);
   const galleryStyle = getComputedStyle(elements.gallery);
+  const appStyle = getComputedStyle(elements.appShell);
   const pixels = (value) => parseFloat(value) || 0;
   const horizontalPadding = pixels(panelStyle.paddingLeft) + pixels(panelStyle.paddingRight);
   const verticalPadding = pixels(panelStyle.paddingTop) + pixels(panelStyle.paddingBottom);
+  const panelRect = elements.previewPanel.getBoundingClientRect();
+  const viewportPanelHeight = Math.max(
+    1,
+    window.innerHeight
+      - Math.max(0, panelRect.top)
+      - elements.footer.offsetHeight
+      - pixels(appStyle.paddingBottom)
+  );
   return {
     width: Math.max(1, elements.previewPanel.clientWidth - horizontalPadding),
-    height: Math.max(1, elements.previewPanel.clientHeight - verticalPadding),
+    height: Math.max(1, Math.min(elements.previewPanel.clientHeight, viewportPanelHeight) - verticalPadding),
     gap: pixels(galleryStyle.columnGap) || 16
   };
 }
