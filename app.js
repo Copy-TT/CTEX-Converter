@@ -1,4 +1,4 @@
-import { translations } from "./locales.js?v=0.8e";
+import { translations } from "./locales.js?v=0.8f";
 
 const CTEX_WEBP_PAYLOAD_OFFSET = 56;
 const CTEX_MAX_DIMENSION = 0xffff;
@@ -8,8 +8,12 @@ const IMAGE_FORMAT_RGBA8 = 5;
 const JPEG_METADATA_LIMIT = 2 * 1024 * 1024;
 const MAX_FILES = 20;
 const MAX_THUMBNAIL_SIZE = 640;
-const MIN_GALLERY_TILE_HEIGHT = 140;
-const MIN_GALLERY_TILE_WIDTH = 140;
+const GALLERY_CARD_CAPTION_ALLOWANCE = 26;
+const GALLERY_LAYOUT_HYSTERESIS_MIN = 24;
+const GALLERY_LAYOUT_HYSTERESIS_RATIO = .08;
+const GALLERY_RESIZE_DELAY = 120;
+const MAX_GALLERY_TILE_SIZE = 640;
+const MIN_GALLERY_TILE_SIZE = 140;
 const ZIP_UINT32_MAX = 0xffffffff;
 const JPEG_SOF_MARKERS = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
 const JPG_EXTENSION = /\.(jpg|jpeg|jpe|jfif)$/i;
@@ -33,6 +37,7 @@ const state = {
   detailFromList: false,
   galleryScrollTop: 0,
   galleryScrollLeft: 0,
+  galleryLayout: null,
   activeImage: null,
   activeImageId: null,
   zoom: 1,
@@ -100,6 +105,7 @@ let detailRequestId = 0;
 let documentId = 0;
 let exportInProgress = false;
 let dragDepth = 0;
+let galleryResizeTimer = 0;
 
 class StatusError extends Error {
   constructor(key) {
@@ -142,7 +148,7 @@ elements.autoShrink.addEventListener("change", toggleAutoShrink);
 
 window.addEventListener("resize", () => {
   if (state.view === "detail" && state.activeImage && state.autoShrink) setZoom(calculateAutoShrinkZoom());
-  if (state.view === "gallery" && state.documents.length) updateGalleryLayout();
+  scheduleGalleryLayoutUpdate();
   positionOpenInfoPopovers();
 });
 window.addEventListener("scroll", positionOpenInfoPopovers, true);
@@ -649,11 +655,20 @@ function updateGalleryLayout() {
   const layout = getGalleryLayout();
   elements.gallery.className = `gallery ${layout.className}`;
   elements.gallery.style.removeProperty("--gallery-columns");
-  elements.gallery.style.removeProperty("--gallery-rows");
+  elements.gallery.style.removeProperty("--gallery-tile-size");
   if (layout.className === "gallery-auto") {
     elements.gallery.style.setProperty("--gallery-columns", layout.columns);
-    elements.gallery.style.setProperty("--gallery-rows", layout.rows);
+    elements.gallery.style.setProperty("--gallery-tile-size", `${layout.tileSize}px`);
   }
+  state.galleryLayout = { ...layout, count: state.documents.length };
+}
+
+function scheduleGalleryLayoutUpdate() {
+  if (galleryResizeTimer) clearTimeout(galleryResizeTimer);
+  galleryResizeTimer = window.setTimeout(() => {
+    galleryResizeTimer = 0;
+    if (state.view === "gallery" && state.documents.length) updateGalleryLayout();
+  }, GALLERY_RESIZE_DELAY);
 }
 
 function getGalleryLayout() {
@@ -665,8 +680,11 @@ function getGalleryLayout() {
     if (shapes.every((shape) => shape === "tall")) return { className: "gallery-two-tall", columns: 2, rows: 1 };
   }
   const { width, height, gap } = getGalleryAvailableSize();
-  const { columns, rows } = calculateAutomaticGrid(count, width, height, gap);
-  return { className: "gallery-auto", columns, rows };
+  const previousLayout = state.galleryLayout?.className === "gallery-auto" && state.galleryLayout.count === count
+    ? state.galleryLayout
+    : null;
+  const { columns, rows, tileSize } = calculateAutomaticGrid(count, width, height, gap, previousLayout);
+  return { className: "gallery-auto", columns, rows, tileSize };
 }
 
 function getExtremeGalleryShape(documentRecord) {
@@ -690,26 +708,44 @@ function getGalleryAvailableSize() {
   };
 }
 
-function calculateAutomaticGrid(count, width, height, gap = 16) {
+function calculateAutomaticGrid(count, width, height, gap = 16, previousLayout = null) {
   const safeCount = Math.max(1, count);
   const safeWidth = Math.max(1, width);
   const safeHeight = Math.max(1, height);
-  const widthLimitedColumns = Math.max(1, Math.floor((safeWidth + gap) / (MIN_GALLERY_TILE_WIDTH + gap)));
-  const maximumColumns = Math.max(1, Math.min(safeCount, widthLimitedColumns));
-  let best = null;
-  for (let columns = 1; columns <= maximumColumns; columns++) {
+  const candidates = [];
+  for (let columns = 1; columns <= safeCount; columns++) {
     const rows = Math.ceil(safeCount / columns);
-    const cellWidth = Math.max(1, (safeWidth - gap * (columns - 1)) / columns);
-    const fittedHeight = (safeHeight - gap * (rows - 1)) / rows;
-    const cellHeight = Math.max(MIN_GALLERY_TILE_HEIGHT, fittedHeight);
-    const aspectPenalty = Math.abs(Math.log(cellWidth / cellHeight));
+    const widthLimit = (safeWidth - gap * (columns - 1)) / columns;
+    const heightLimit = (safeHeight - gap * (rows - 1) - GALLERY_CARD_CAPTION_ALLOWANCE * rows) / rows;
+    const fittedSize = Math.max(1, Math.min(widthLimit, heightLimit));
     const emptyRatio = (columns * rows - safeCount) / (columns * rows);
-    const score = aspectPenalty + emptyRatio * .35;
-    if (!best || score < best.score - 1e-9 || Math.abs(score - best.score) <= 1e-9 && emptyRatio < best.emptyRatio) {
-      best = { columns, rows, score, emptyRatio };
+    candidates.push({ columns, rows, fittedSize, emptyRatio });
+  }
+
+  candidates.sort((left, right) =>
+    right.fittedSize - left.fittedSize
+    || left.emptyRatio - right.emptyRatio
+    || Math.abs(left.columns - left.rows) - Math.abs(right.columns - right.rows)
+    || left.columns - right.columns
+  );
+
+  let selected = candidates[0];
+  if (previousLayout) {
+    const previous = candidates.find((candidate) => candidate.columns === previousLayout.columns);
+    if (previous) {
+      const improvement = selected.fittedSize - previous.fittedSize;
+      const threshold = Math.max(GALLERY_LAYOUT_HYSTERESIS_MIN, previous.fittedSize * GALLERY_LAYOUT_HYSTERESIS_RATIO);
+      const previousFitsMinimum = previous.fittedSize >= MIN_GALLERY_TILE_SIZE;
+      const selectedRestoresMinimum = selected.fittedSize >= MIN_GALLERY_TILE_SIZE;
+      if (improvement <= threshold && (previousFitsMinimum || !selectedRestoresMinimum)) selected = previous;
     }
   }
-  return { columns: best.columns, rows: best.rows };
+
+  return {
+    columns: selected.columns,
+    rows: selected.rows,
+    tileSize: Math.round(Math.min(MAX_GALLERY_TILE_SIZE, Math.max(MIN_GALLERY_TILE_SIZE, selected.fittedSize)))
+  };
 }
 
 function createGalleryBadge(documentRecord) {
@@ -1298,6 +1334,10 @@ function clearDocuments() {
 }
 
 function resetDocumentState() {
+  if (galleryResizeTimer) {
+    clearTimeout(galleryResizeTimer);
+    galleryResizeTimer = 0;
+  }
   for (const documentRecord of state.documents) if (documentRecord.thumbnailUrl) URL.revokeObjectURL(documentRecord.thumbnailUrl);
   state.documents = [];
   state.selectedId = null;
@@ -1305,6 +1345,7 @@ function resetDocumentState() {
   state.detailFromList = false;
   state.galleryScrollTop = 0;
   state.galleryScrollLeft = 0;
+  state.galleryLayout = null;
   state.activeImage = null;
   state.activeImageId = null;
   state.zoom = 1;
