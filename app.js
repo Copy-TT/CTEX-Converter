@@ -1,4 +1,4 @@
-import { translations } from "./locales.js?v=0.8h";
+import { translations } from "./locales.js?v=0.8.1";
 
 const CTEX_WEBP_PAYLOAD_OFFSET = 56;
 const CTEX_MAX_DIMENSION = 0xffff;
@@ -8,7 +8,7 @@ const IMAGE_FORMAT_RGBA8 = 5;
 const JPEG_METADATA_LIMIT = 2 * 1024 * 1024;
 const MAX_FILES = 20;
 const MAX_THUMBNAIL_SIZE = 640;
-const GALLERY_RESIZE_DELAY = 120;
+const GALLERY_RESIZE_DELAY = 100;
 const ZIP_UINT32_MAX = 0xffffffff;
 const JPEG_SOF_MARKERS = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
 const JPG_EXTENSION = /\.(jpg|jpeg|jpe|jfif)$/i;

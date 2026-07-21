@@ -1,4 +1,4 @@
-# CTEX Converter v0.8h
+# CTEX Converter v0.8.1
 
 A browser-based, local-only converter and previewer for PNG, JPEG, and Godot CTEX images, with batch conversion for up to 20 images.
 
