@@ -1,29 +1,38 @@
-import { translations } from "./locales.js?v=0.8.1";
+import {
+  CTEX_MAX_DIMENSION,
+  CTEX_WEBP_PAYLOAD_OFFSET,
+  EXPORT_FORMATS,
+  IMAGE_FORMATS,
+  IMAGE_FORMAT_RGB8,
+  IMAGE_FORMAT_RGBA8,
+  JPEG_METADATA_LIMIT,
+  MAX_ARCHIVE_BYTES,
+  MAX_BATCH_PIXELS,
+  calculateGalleryColumns,
+  calculateStoredZipEntrySize,
+  createBmpHeader,
+  createStoredZip,
+  createTimestampZipName,
+  createUniqueOutputName,
+  createWebpCtexHeader,
+  detectHintKind,
+  detectSignatureKind,
+  getBmpFileSize,
+  readAscii,
+  stripSupportedExtension,
+  validatePixelDimensions,
+  writeBmpBgraRows
+} from "./core.js?v=0.8.2";
+import { translations } from "./locales.js?v=0.8.2";
 
-const CTEX_WEBP_PAYLOAD_OFFSET = 56;
-const CTEX_MAX_DIMENSION = 0xffff;
-const DATA_FORMAT_WEBP = 2;
-const IMAGE_FORMAT_RGB8 = 4;
-const IMAGE_FORMAT_RGBA8 = 5;
-const JPEG_METADATA_LIMIT = 2 * 1024 * 1024;
+const FILE_SIGNATURE_BYTES = 70;
 const MAX_FILES = 20;
 const MAX_THUMBNAIL_SIZE = 640;
 const GALLERY_RESIZE_DELAY = 100;
-const ZIP_UINT32_MAX = 0xffffffff;
-const JPEG_SOF_MARKERS = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
-const JPG_EXTENSION = /\.(jpg|jpeg|jpe|jfif)$/i;
+const BMP_SCAN_ROWS = 32;
+const ALPHA_SCAN_ROWS = 128;
 const PRESET_COLORS = { white: "#ffffff", gray: "#808080", black: "#000000" };
 const SUPPORTED_LANGUAGES = ["en", "ko", "zh-CN", "zh-TW", "ja", "ru"];
-const RASTER_FORMATS = {
-  png: { matches: isPng, inspect: inspectPng, fallbackFormat: "PNG" },
-  jpg: { matches: isJpg, inspect: inspectJpeg, fallbackFormat: "JPEG" }
-};
-const EXPORT_FORMATS = {
-  png: { extension: ".png", mime: "image/png", description: "PNG" },
-  jpg: { extension: ".jpg", mime: "image/jpeg", description: "JPG" },
-  ctex: { extension: ".ctex", mime: "application/octet-stream", description: "CTEX" }
-};
-const CRC32_TABLE = createCrc32Table();
 
 const state = {
   documents: [],
@@ -34,6 +43,7 @@ const state = {
   galleryScrollLeft: 0,
   activeImage: null,
   activeImageId: null,
+  detailLoading: false,
   zoom: 1,
   autoShrink: true,
   opening: false,
@@ -48,13 +58,16 @@ const elements = {
   appShell: document.querySelector(".app-shell"),
   openPng: $("open-png"),
   openJpg: $("open-jpg"),
+  openBmp: $("open-bmp"),
   openCtex: $("open-ctex"),
   clearFile: $("clear-file"),
   pngInput: $("png-input"),
   jpgInput: $("jpg-input"),
+  bmpInput: $("bmp-input"),
   ctexInput: $("ctex-input"),
   exportPng: $("export-png"),
   exportJpg: $("export-jpg"),
+  exportBmp: $("export-bmp"),
   exportCtex: $("export-ctex"),
   rotateLeft: $("rotate-left"),
   rotateRight: $("rotate-right"),
@@ -113,13 +126,16 @@ class StatusError extends Error {
 
 elements.openPng.addEventListener("click", () => elements.pngInput.click());
 elements.openJpg.addEventListener("click", () => elements.jpgInput.click());
+elements.openBmp.addEventListener("click", () => elements.bmpInput.click());
 elements.openCtex.addEventListener("click", () => elements.ctexInput.click());
 elements.clearFile.addEventListener("click", clearDocuments);
 elements.pngInput.addEventListener("change", (event) => handleFileInput(event, "png"));
 elements.jpgInput.addEventListener("change", (event) => handleFileInput(event, "jpg"));
+elements.bmpInput.addEventListener("change", (event) => handleFileInput(event, "bmp"));
 elements.ctexInput.addEventListener("change", (event) => handleFileInput(event, "ctex"));
 elements.exportPng.addEventListener("click", () => exportImages("png"));
 elements.exportJpg.addEventListener("click", () => exportImages("jpg"));
+elements.exportBmp.addEventListener("click", () => exportImages("bmp"));
 elements.exportCtex.addEventListener("click", () => exportImages("ctex"));
 elements.rotateLeft.addEventListener("click", () => rotate(-90, "rotatedLeft"));
 elements.rotateRight.addEventListener("click", () => rotate(90, "rotatedRight"));
@@ -140,6 +156,8 @@ elements.bgR.addEventListener("input", updateCustomFromRgb);
 elements.bgG.addEventListener("input", updateCustomFromRgb);
 elements.bgB.addEventListener("input", updateCustomFromRgb);
 elements.bgHex.addEventListener("input", updateCustomFromHex);
+for (const input of [elements.bgR, elements.bgG, elements.bgB]) input.addEventListener("blur", normalizeRgbInputs);
+elements.bgHex.addEventListener("blur", normalizeHexInput);
 elements.bgColorPicker.addEventListener("input", () => setCustomBackground(elements.bgColorPicker.value));
 elements.autoShrink.addEventListener("change", toggleAutoShrink);
 
@@ -281,6 +299,7 @@ async function openFiles(fileList, expectedKind = null) {
 
   let success = 0;
   let failed = 0;
+  let batchPixels = 0;
   let singleErrorKey = "imageRead";
   let singleImage = null;
 
@@ -289,13 +308,14 @@ async function openFiles(fileList, expectedKind = null) {
     let documentRecord;
     let decodedImage = null;
     try {
-      const loaded = await createDocumentRecord(file, expectedKind);
+      const loaded = await createDocumentRecord(file, expectedKind, MAX_BATCH_PIXELS - batchPixels);
       documentRecord = loaded.documentRecord;
       decodedImage = loaded.image;
+      batchPixels += documentRecord.sourceWidth * documentRecord.sourceHeight;
       success++;
     } catch (error) {
       singleErrorKey = error instanceof StatusError ? error.key : "imageRead";
-      documentRecord = createErrorDocument(file, expectedKind || detectKind(file), singleErrorKey);
+      documentRecord = createErrorDocument(file, expectedKind || detectHintKind(file), singleErrorKey);
       failed++;
     }
 
@@ -338,10 +358,9 @@ async function openFiles(fileList, expectedKind = null) {
   }
 }
 
-async function createDocumentRecord(file, expectedKind) {
-  const kind = detectKind(file);
-  if (!kind || (expectedKind && kind !== expectedKind)) throw new StatusError("unsupportedFile");
-  const loaded = await decodeAndInspect(file, kind);
+async function createDocumentRecord(file, expectedKind, remainingBatchPixels) {
+  const kind = await detectKind(file, expectedKind);
+  const loaded = await decodeAndInspect(file, kind, remainingBatchPixels);
   const thumbnailUrl = await createThumbnailUrl(loaded.image);
   return {
     image: loaded.image,
@@ -368,7 +387,7 @@ function createErrorDocument(file, kind, errorKey) {
     id: ++documentId,
     file,
     kind,
-    metadata: { format: kind === "ctex" ? "CTEX" : kind === "png" ? "PNG" : kind === "jpg" ? "JPEG" : "-", dpi: null },
+    metadata: { format: IMAGE_FORMATS[kind]?.label || "-", dpi: null },
     sourceWidth: 0,
     sourceHeight: 0,
     rotation: 0,
@@ -381,27 +400,55 @@ function createErrorDocument(file, kind, errorKey) {
   };
 }
 
-async function decodeAndInspect(file, kind) {
-  if (kind === "ctex") {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const payload = validateWebpCtex(bytes);
-    const image = await decodeImage(new Blob([payload], { type: "image/webp" }));
-    if (image.naturalWidth !== readUint32(bytes, 8) || image.naturalHeight !== readUint32(bytes, 12)) throw new StatusError("ctexRead");
-    const rgba = readUint32(bytes, 48) === IMAGE_FORMAT_RGBA8;
-    const pixelFormat = rgba ? "RGBA8" : "RGB8";
-    const bitDepth = rgba ? 32 : 24;
-    return { image, metadata: { format: `CTEX (GST2 / WebP / ${pixelFormat}, ${bitDepth}-bit)`, dpi: null } };
+async function detectKind(file, expectedKind = null) {
+  const bytes = new Uint8Array(await file.slice(0, FILE_SIGNATURE_BYTES).arrayBuffer());
+  const signatureKind = detectSignatureKind(bytes);
+  const hintedKind = detectHintKind(file);
+  if (!signatureKind) {
+    const intendedKind = expectedKind || hintedKind;
+    if (intendedKind === "ctex") throw new StatusError("ctexRead");
+    if (intendedKind) throw new StatusError("imageRead");
+    throw new StatusError("unsupportedFile");
   }
+  if (expectedKind && signatureKind !== expectedKind) throw new StatusError("unsupportedFile");
+  return signatureKind;
+}
 
-  const descriptor = RASTER_FORMATS[kind];
-  if (!descriptor || !descriptor.matches(file)) throw new StatusError("unsupportedFile");
-  const metadataPromise = descriptor.inspect(file).catch(() => ({ format: descriptor.fallbackFormat, dpi: null }));
+async function inspectFile(file, kind) {
+  const descriptor = IMAGE_FORMATS[kind];
+  if (!descriptor) throw new StatusError("unsupportedFile");
+  const readLimit = kind === "jpg" ? JPEG_METADATA_LIMIT : kind === "bmp" ? 256 : FILE_SIGNATURE_BYTES;
+  const bytes = new Uint8Array(await file.slice(0, Math.min(file.size, readLimit)).arrayBuffer());
   try {
-    const [image, metadata] = await Promise.all([decodeImage(file), metadataPromise]);
+    return descriptor.parse(bytes, file.size);
+  } catch (error) {
+    if (error?.message === "ctex-unsupported") throw new StatusError("unsupportedCtex");
+    if (kind === "ctex") throw new StatusError("ctexRead");
+    throw new StatusError("imageRead");
+  }
+}
+
+async function decodeAndInspect(file, kind, remainingBatchPixels = MAX_BATCH_PIXELS) {
+  const metadata = await inspectFile(file, kind);
+  const expectedWidth = metadata.decodedWidth || metadata.width;
+  const expectedHeight = metadata.decodedHeight || metadata.height;
+  if (!validatePixelDimensions(expectedWidth, expectedHeight)) throw new StatusError("imageTooLarge");
+  if (expectedWidth * expectedHeight > remainingBatchPixels) throw new StatusError("batchTooLarge");
+  const source = kind === "ctex"
+    ? file.slice(CTEX_WEBP_PAYLOAD_OFFSET, file.size, "image/webp")
+    : file;
+  try {
+    const image = await decodeImage(source);
+    const decodedMatches = image.naturalWidth === expectedWidth && image.naturalHeight === expectedHeight;
+    const rawMatches = image.naturalWidth === metadata.width && image.naturalHeight === metadata.height;
+    if (!decodedMatches && !rawMatches) throw new StatusError(kind === "ctex" ? "ctexRead" : "imageRead");
+    if (!decodedMatches && rawMatches && metadata.dpi && metadata.orientation >= 5 && metadata.orientation <= 8) {
+      metadata.dpi = { x: metadata.dpi.y, y: metadata.dpi.x };
+    }
     return { image, metadata };
   } catch (error) {
     if (error instanceof StatusError) throw error;
-    throw new StatusError("imageRead");
+    throw new StatusError(kind === "ctex" ? "ctexRead" : "imageRead");
   }
 }
 
@@ -411,143 +458,15 @@ async function decodeDocumentSource(documentRecord) {
   return loaded.image;
 }
 
-function detectKind(file) {
-  if (/\.ctex$/i.test(file.name)) return "ctex";
-  if (isPng(file)) return "png";
-  if (isJpg(file)) return "jpg";
-  return null;
-}
-
 async function createThumbnailUrl(image) {
   const scale = Math.min(1, MAX_THUMBNAIL_SIZE / Math.max(image.naturalWidth, image.naturalHeight));
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
   canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-  canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+  const thumbnailContext = canvas.getContext("2d");
+  if (!thumbnailContext) throw new StatusError("imageTooLarge");
+  thumbnailContext.drawImage(image, 0, 0, canvas.width, canvas.height);
   return URL.createObjectURL(await canvasBlob(canvas, "image/png"));
-}
-
-function validateWebpCtex(bytes) {
-  if (bytes.length < CTEX_WEBP_PAYLOAD_OFFSET) throw new StatusError("ctexRead");
-  if (readAscii(bytes, 0, 4) !== "GST2" || readUint32(bytes, 4) !== 1 || readUint32(bytes, 36) !== DATA_FORMAT_WEBP) throw new StatusError("unsupportedCtex");
-  const width = readUint32(bytes, 8);
-  const height = readUint32(bytes, 12);
-  if (!width || !height || readUint16(bytes, 40) !== width || readUint16(bytes, 42) !== height) throw new StatusError("ctexRead");
-  const pixelFormat = readUint32(bytes, 48);
-  if (pixelFormat !== IMAGE_FORMAT_RGB8 && pixelFormat !== IMAGE_FORMAT_RGBA8) throw new StatusError("unsupportedCtex");
-  if (readUint32(bytes, 52) !== bytes.length - CTEX_WEBP_PAYLOAD_OFFSET || readAscii(bytes, 56, 4) !== "RIFF" || readAscii(bytes, 64, 4) !== "WEBP") throw new StatusError("ctexRead");
-  return bytes.slice(CTEX_WEBP_PAYLOAD_OFFSET);
-}
-
-async function inspectPng(file) {
-  const bytes = new Uint8Array(await file.slice(0, 33).arrayBuffer());
-  if (bytes.length < 26 || !isPngSignature(bytes) || readAscii(bytes, 12, 4) !== "IHDR") return { format: "PNG", dpi: null };
-  const bitDepth = bytes[24];
-  const colorType = bytes[25];
-  const colorTypes = {
-    0: { label: "Grayscale", channels: 1 },
-    2: { label: "RGB", channels: 3 },
-    3: { label: "Indexed", channels: 1 },
-    4: { label: "Grayscale + Alpha", channels: 2 },
-    6: { label: "RGBA", channels: 4 }
-  };
-  const color = colorTypes[colorType];
-  if (!color || !bitDepth) return { format: "PNG", dpi: null };
-  return { format: `PNG (${color.label}, ${bitDepth * color.channels}-bit)`, dpi: null };
-}
-
-async function inspectJpeg(file) {
-  const bytes = new Uint8Array(await file.slice(0, Math.min(file.size, JPEG_METADATA_LIMIT)).arrayBuffer());
-  const metadata = parseJpegMetadata(bytes);
-  let format = "JPEG";
-  if (metadata.precision && metadata.components) {
-    const model = metadata.components === 1 ? "Grayscale" : metadata.components === 3 ? "RGB" : metadata.components === 4 ? "CMYK" : `${metadata.components}-channel`;
-    format = `JPEG (${model}, ${metadata.precision * metadata.components}-bit)`;
-  }
-  return { format, dpi: metadata.exifDpi || metadata.jfifDpi || null };
-}
-
-function parseJpegMetadata(bytes) {
-  const result = { precision: null, components: null, exifDpi: null, jfifDpi: null };
-  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return result;
-  let offset = 2;
-  while (offset + 1 < bytes.length) {
-    while (offset < bytes.length && bytes[offset] !== 0xff) offset++;
-    while (offset < bytes.length && bytes[offset] === 0xff) offset++;
-    if (offset >= bytes.length) break;
-    const marker = bytes[offset++];
-    if (marker === 0xd9 || marker === 0xda) break;
-    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
-    if (offset + 2 > bytes.length) break;
-    const segmentLength = readUint16BE(bytes, offset);
-    if (segmentLength < 2) break;
-    const dataStart = offset + 2;
-    const dataEnd = dataStart + segmentLength - 2;
-    if (dataEnd > bytes.length) break;
-    if (marker === 0xe0 && !result.jfifDpi) result.jfifDpi = parseJfifDpi(bytes, dataStart, dataEnd);
-    if (marker === 0xe1 && !result.exifDpi) result.exifDpi = parseExifDpi(bytes, dataStart, dataEnd);
-    if (JPEG_SOF_MARKERS.has(marker) && dataEnd - dataStart >= 6) {
-      result.precision = bytes[dataStart];
-      result.components = bytes[dataStart + 5];
-    }
-    offset = dataEnd;
-  }
-  return result;
-}
-
-function parseJfifDpi(bytes, start, end) {
-  if (end - start < 12 || readAscii(bytes, start, 5) !== "JFIF\0") return null;
-  const unit = bytes[start + 7];
-  const x = readUint16BE(bytes, start + 8);
-  const y = readUint16BE(bytes, start + 10);
-  if (!x || !y || (unit !== 1 && unit !== 2)) return null;
-  const factor = unit === 2 ? 2.54 : 1;
-  return normalizeDpi(x * factor, y * factor);
-}
-
-function parseExifDpi(bytes, start, end) {
-  if (end - start < 14 || readAscii(bytes, start, 6) !== "Exif\0\0") return null;
-  const tiffStart = start + 6;
-  const tiffLength = end - tiffStart;
-  const byteOrder = readAscii(bytes, tiffStart, 2);
-  const littleEndian = byteOrder === "II";
-  if (!littleEndian && byteOrder !== "MM") return null;
-  const view = new DataView(bytes.buffer, bytes.byteOffset + tiffStart, tiffLength);
-  const uint16 = (offset) => offset >= 0 && offset + 2 <= tiffLength ? view.getUint16(offset, littleEndian) : null;
-  const uint32 = (offset) => offset >= 0 && offset + 4 <= tiffLength ? view.getUint32(offset, littleEndian) : null;
-  if (uint16(2) !== 42) return null;
-  const ifdOffset = uint32(4);
-  if (ifdOffset === null || ifdOffset + 2 > tiffLength) return null;
-  const entryCount = uint16(ifdOffset);
-  let x = null;
-  let y = null;
-  let unit = null;
-  for (let index = 0; index < entryCount; index++) {
-    const entry = ifdOffset + 2 + index * 12;
-    if (entry + 12 > tiffLength) break;
-    const tag = uint16(entry);
-    const type = uint16(entry + 2);
-    const count = uint32(entry + 4);
-    if ((tag === 0x011a || tag === 0x011b) && type === 5 && count === 1) {
-      const valueOffset = uint32(entry + 8);
-      if (valueOffset !== null && valueOffset + 8 <= tiffLength) {
-        const numerator = uint32(valueOffset);
-        const denominator = uint32(valueOffset + 4);
-        const value = numerator !== null && denominator ? numerator / denominator : null;
-        if (tag === 0x011a) x = value;
-        else y = value;
-      }
-    }
-    if (tag === 0x0128 && type === 3 && count === 1) unit = uint16(entry + 8);
-  }
-  if (!x || !y || (unit !== 2 && unit !== 3)) return null;
-  const factor = unit === 3 ? 2.54 : 1;
-  return normalizeDpi(x * factor, y * factor);
-}
-
-function normalizeDpi(x, y) {
-  if (!Number.isFinite(x) || !Number.isFinite(y) || x <= 0 || y <= 0) return null;
-  return { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
 }
 
 function renderApplication() {
@@ -561,7 +480,7 @@ function renderPreview() {
   const galleryVisible = state.view === "gallery" && !isEmpty;
   elements.dropZone.hidden = !isEmpty || state.opening;
   elements.gallery.hidden = !galleryVisible;
-  elements.previewLoading.hidden = state.view !== "detail" || Boolean(state.activeImage);
+  elements.previewLoading.hidden = !state.detailLoading;
   elements.canvasWrap.hidden = state.view !== "detail" || !state.activeImage;
   elements.previewPanel.classList.toggle("gallery-view", galleryVisible);
   if (state.view === "gallery") renderGallery();
@@ -580,23 +499,28 @@ function renderGallery() {
     if (documentRecord.id === state.selectedId) tile.classList.add("selected");
     if (documentRecord.errorKey) tile.classList.add("has-error");
     if (documentRecord.exportState !== "idle") tile.classList.add(`export-${documentRecord.exportState}`);
-    tile.tabIndex = 0;
-    tile.setAttribute("role", "button");
-    tile.setAttribute("aria-label", t("selectImage", { name: documentRecord.file.name }));
-    tile.addEventListener("click", (event) => {
-      if (event.target.closest("input, button")) return;
-      selectDocument(documentRecord.id);
-    });
-    tile.addEventListener("dblclick", (event) => {
-      if (event.target.closest("input, button") || documentRecord.errorKey) return;
+
+    const selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.className = "gallery-select";
+    selectButton.setAttribute("aria-label", t("selectImage", { name: documentRecord.file.name }));
+    if (documentRecord.id === state.selectedId) selectButton.setAttribute("aria-current", "true");
+    selectButton.addEventListener("click", () => selectDocument(documentRecord.id));
+    selectButton.addEventListener("dblclick", () => {
+      if (documentRecord.errorKey) return;
       selectDocument(documentRecord.id);
       enterDetailView();
     });
-    tile.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      if (state.selectedId === documentRecord.id && event.key === "Enter" && !documentRecord.errorKey) enterDetailView();
-      else selectDocument(documentRecord.id);
+    selectButton.addEventListener("keydown", (event) => {
+      if (event.repeat) return;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (state.selectedId !== documentRecord.id) selectDocument(documentRecord.id);
+        else if (!documentRecord.errorKey) enterDetailView();
+      } else if (isSpaceKey(event.key)) {
+        event.preventDefault();
+        selectDocument(documentRecord.id);
+      }
     });
 
     const checkbox = document.createElement("input");
@@ -605,11 +529,17 @@ function renderGallery() {
     checkbox.checked = documentRecord.checked;
     checkbox.disabled = Boolean(documentRecord.errorKey) || exportInProgress || state.opening;
     checkbox.setAttribute("aria-label", t("includeInExport", { name: documentRecord.file.name }));
-    checkbox.addEventListener("click", (event) => event.stopPropagation());
-    checkbox.addEventListener("change", () => {
+    const updateCheckedState = () => {
       documentRecord.checked = checkbox.checked;
       updateControls();
       updatePreviewActions();
+    };
+    checkbox.addEventListener("change", updateCheckedState);
+    checkbox.addEventListener("keydown", (event) => {
+      if (!isSpaceKey(event.key) || event.repeat) return;
+      event.preventDefault();
+      checkbox.checked = !checkbox.checked;
+      updateCheckedState();
     });
 
     const remove = document.createElement("button");
@@ -618,8 +548,10 @@ function renderGallery() {
     remove.textContent = "×";
     remove.disabled = exportInProgress || state.opening;
     remove.setAttribute("aria-label", t("removeImage", { name: documentRecord.file.name }));
-    remove.addEventListener("click", (event) => {
-      event.stopPropagation();
+    remove.addEventListener("click", () => removeDocument(documentRecord.id));
+    remove.addEventListener("keydown", (event) => {
+      if ((event.key !== "Enter" && !isSpaceKey(event.key)) || event.repeat) return;
+      event.preventDefault();
       removeDocument(documentRecord.id);
     });
 
@@ -644,11 +576,16 @@ function renderGallery() {
     name.className = "gallery-name";
     name.textContent = documentRecord.file.name;
 
-    tile.append(checkbox, remove, thumbnail, name);
+    selectButton.append(thumbnail, name);
+    tile.append(selectButton, checkbox, remove);
     const badge = createGalleryBadge(documentRecord);
     if (badge) tile.append(badge);
     elements.gallery.append(tile);
   }
+}
+
+function isSpaceKey(key) {
+  return key === " " || key === "Space" || key === "Spacebar";
 }
 
 function updateGalleryLayout() {
@@ -691,31 +628,6 @@ function getGalleryAvailableSize() {
     height: Math.max(1, Math.min(elements.previewPanel.clientHeight, viewportPanelHeight) - verticalPadding),
     gap: pixels(galleryStyle.columnGap) || 16
   };
-}
-
-function calculateGalleryColumns(count, width, height, gap = 16) {
-  const safeCount = Math.max(1, count);
-  const safeWidth = Math.max(1, width);
-  const safeHeight = Math.max(1, height);
-  const minimumColumns = Math.min(2, safeCount);
-  let best = null;
-
-  for (let columns = minimumColumns; columns <= safeCount; columns++) {
-    const rows = Math.ceil(safeCount / columns);
-    const tileSize = Math.max(1, (safeWidth - gap * (columns - 1)) / columns);
-    const contentHeight = rows * tileSize + gap * (rows - 1);
-    const overflow = Math.max(0, contentHeight - safeHeight);
-    const candidate = { columns, tileSize, overflow };
-    if (
-      !best
-      || candidate.overflow < best.overflow - 1
-      || Math.abs(candidate.overflow - best.overflow) <= 1 && candidate.tileSize > best.tileSize
-    ) {
-      best = candidate;
-    }
-  }
-
-  return best.columns;
 }
 
 function scheduleGalleryThumbnailScaleUpdate() {
@@ -770,7 +682,13 @@ function createGalleryBadge(documentRecord) {
 function selectDocument(id) {
   if (!state.documents.some((item) => item.id === id)) return;
   state.selectedId = id;
-  renderGallery();
+  for (const tile of elements.gallery.querySelectorAll(".gallery-item")) {
+    const selected = Number(tile.dataset.documentId) === id;
+    tile.classList.toggle("selected", selected);
+    const selectButton = tile.querySelector(".gallery-select");
+    if (selected) selectButton?.setAttribute("aria-current", "true");
+    else selectButton?.removeAttribute("aria-current");
+  }
   updateMetadata();
   updateControls();
 }
@@ -787,6 +705,7 @@ async function enterDetailView() {
   state.view = "detail";
   state.activeImage = null;
   state.activeImageId = null;
+  state.detailLoading = true;
   state.zoom = 1;
   elements.zoomReset.textContent = "100%";
   renderApplication();
@@ -797,6 +716,7 @@ async function enterDetailView() {
     if (requestId !== detailRequestId || state.selectedId !== documentRecord.id || state.view !== "detail") return;
     state.activeImage = image;
     state.activeImageId = documentRecord.id;
+    state.detailLoading = false;
     renderApplication();
   } catch (error) {
     if (requestId !== detailRequestId) return;
@@ -804,6 +724,7 @@ async function enterDetailView() {
     documentRecord.checked = false;
     state.activeImage = null;
     state.activeImageId = null;
+    state.detailLoading = false;
     state.view = "gallery";
     state.detailFromList = false;
     renderApplication();
@@ -818,13 +739,14 @@ function returnToList() {
   state.detailFromList = false;
   state.activeImage = null;
   state.activeImageId = null;
+  state.detailLoading = false;
   state.zoom = 1;
   elements.zoomReset.textContent = "100%";
   renderApplication();
   requestAnimationFrame(() => {
     elements.previewPanel.scrollTop = state.galleryScrollTop;
     elements.previewPanel.scrollLeft = state.galleryScrollLeft;
-    elements.gallery.querySelector(".gallery-item.selected")?.focus({ preventScroll: true });
+    elements.gallery.querySelector(".gallery-item.selected .gallery-select")?.focus({ preventScroll: true });
   });
 }
 
@@ -937,6 +859,8 @@ function resetTransform() {
 }
 
 function refreshEditedDocument() {
+  const documentRecord = getSelectedDocument();
+  if (documentRecord) documentRecord.exportState = "idle";
   updateMetadata();
   if (state.view === "detail" && state.activeImageId === state.selectedId) renderCanvas();
   else renderGallery();
@@ -1010,18 +934,37 @@ function toggleAutoShrink() {
 function setBackgroundMode(mode) {
   state.background.mode = mode;
   state.background.color = mode === "custom" ? state.background.customColor : PRESET_COLORS[mode];
+  invalidateExportStates();
   updateBackgroundControls();
 }
 
 function updateCustomFromRgb() {
   const values = [elements.bgR.value, elements.bgG.value, elements.bgB.value].map(Number);
-  if (values.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return;
+  const invalid = values.some((value) => !Number.isInteger(value) || value < 0 || value > 255);
+  for (const input of [elements.bgR, elements.bgG, elements.bgB]) input.setAttribute("aria-invalid", String(invalid));
+  if (invalid) return;
   setCustomBackground(`#${values.map((value) => value.toString(16).padStart(2, "0")).join("")}`);
 }
 
 function updateCustomFromHex() {
   const value = elements.bgHex.value.trim();
-  if (/^#[0-9a-f]{6}$/i.test(value)) setCustomBackground(value);
+  const valid = /^#[0-9a-f]{6}$/i.test(value);
+  elements.bgHex.setAttribute("aria-invalid", String(!valid));
+  if (valid) setCustomBackground(value);
+}
+
+function normalizeRgbInputs() {
+  const values = [elements.bgR.value, elements.bgG.value, elements.bgB.value].map((value) => Math.max(0, Math.min(255, Math.round(Number(value)))));
+  if (values.some((value) => !Number.isFinite(value))) {
+    updateBackgroundControls();
+    return;
+  }
+  setCustomBackground(`#${values.map((value) => value.toString(16).padStart(2, "0")).join("")}`);
+}
+
+function normalizeHexInput() {
+  if (/^#[0-9a-f]{6}$/i.test(elements.bgHex.value.trim())) setCustomBackground(elements.bgHex.value.trim());
+  else updateBackgroundControls();
 }
 
 function setCustomBackground(value) {
@@ -1029,6 +972,7 @@ function setCustomBackground(value) {
   state.background.mode = "custom";
   state.background.customColor = hex;
   state.background.color = hex;
+  invalidateExportStates();
   updateBackgroundControls();
 }
 
@@ -1040,23 +984,68 @@ function updateBackgroundControls() {
   elements.bgG.value = parseInt(hex.slice(3, 5), 16);
   elements.bgB.value = parseInt(hex.slice(5, 7), 16);
   elements.bgColorPicker.value = hex.toLowerCase();
+  for (const input of [elements.bgR, elements.bgG, elements.bgB, elements.bgHex]) input.setAttribute("aria-invalid", "false");
+}
+
+function invalidateExportStates() {
+  let changed = false;
+  for (const documentRecord of state.documents) {
+    if (documentRecord.exportState === "idle") continue;
+    documentRecord.exportState = "idle";
+    changed = true;
+  }
+  if (changed && state.view === "gallery") renderGallery();
 }
 
 async function exportImages(kind) {
   const targets = state.documents.filter((item) => item.checked && !item.errorKey);
-  if (!targets.length || !beginExport()) return;
+  if (!targets.length || !EXPORT_FORMATS[kind]) return;
+  try {
+    validateExportPlan(targets, kind);
+  } catch (error) {
+    setStatus(error instanceof StatusError ? error.key : "exportFailed", "error");
+    return;
+  }
+  if (!beginExport()) return;
+  const exportOptions = { backgroundColor: state.background.color };
   try {
     for (const documentRecord of state.documents) documentRecord.exportState = "idle";
-    if (targets.length === 1) await exportSingleImage(targets[0], kind);
-    else await exportImageArchive(targets, kind);
+    if (targets.length === 1) await exportSingleImage(targets[0], kind, exportOptions);
+    else await exportImageArchive(targets, kind, exportOptions);
   } catch (error) {
+    for (const documentRecord of targets) {
+      if (documentRecord.exportState !== "error") documentRecord.exportState = "idle";
+    }
     setStatus(error instanceof StatusError ? error.key : "exportFailed", "error");
   } finally {
     endExport();
   }
 }
 
-async function exportSingleImage(documentRecord, kind) {
+function validateExportPlan(targets, kind) {
+  let totalPixels = 0;
+  let bmpArchiveBytes = 22;
+  const bmpNames = new Set();
+  for (const documentRecord of targets) {
+    const { width, height } = getDocumentDimensions(documentRecord);
+    if (!validatePixelDimensions(width, height)) throw new StatusError("imageTooLarge");
+    if (kind === "ctex" && (width > CTEX_MAX_DIMENSION || height > CTEX_MAX_DIMENSION)) throw new StatusError("dimensionLimit");
+    totalPixels += width * height;
+    if (kind === "bmp") {
+      const size = getBmpFileSize(width, height);
+      if (!size) throw new StatusError("imageTooLarge");
+      const name = createUniqueOutputName(documentRecord.file.name, EXPORT_FORMATS.bmp.extension, bmpNames);
+      const nameByteLength = new TextEncoder().encode(name).length;
+      const entrySize = calculateStoredZipEntrySize(nameByteLength, size);
+      if (!entrySize) throw new StatusError("batchTooLarge");
+      bmpArchiveBytes += entrySize;
+    }
+  }
+  if (totalPixels > MAX_BATCH_PIXELS) throw new StatusError("batchTooLarge");
+  if (targets.length > 1 && kind === "bmp" && bmpArchiveBytes > MAX_ARCHIVE_BYTES) throw new StatusError("batchTooLarge");
+}
+
+async function exportSingleImage(documentRecord, kind, exportOptions) {
   const format = EXPORT_FORMATS[kind];
   const suggestedName = `${baseName(documentRecord.file.name)}${format.extension}`;
   const result = await saveExport(suggestedName, format.mime, format.extension, format.description, async () => {
@@ -1064,7 +1053,7 @@ async function exportSingleImage(documentRecord, kind) {
     renderGallery();
     setStatus("convertingImages", "info", { current: 1, total: 1 });
     try {
-      const blob = await createOutputBlob(documentRecord, kind);
+      const blob = await createOutputBlob(documentRecord, kind, exportOptions);
       documentRecord.exportState = "success";
       renderGallery();
       return blob;
@@ -1077,12 +1066,13 @@ async function exportSingleImage(documentRecord, kind) {
   if (result) setStatus("exportedSingle", "success", { name: result.name });
 }
 
-async function exportImageArchive(targets, kind) {
+async function exportImageArchive(targets, kind, exportOptions) {
   const zipName = createTimestampZipName(new Date());
   let summary = null;
   const result = await saveExport(zipName, "application/zip", ".zip", "ZIP", async () => {
     const entries = [];
     const usedNames = new Set();
+    let archiveBytes = 22;
     let failed = 0;
     for (let index = 0; index < targets.length; index++) {
       const documentRecord = targets[index];
@@ -1090,11 +1080,16 @@ async function exportImageArchive(targets, kind) {
       renderGallery();
       setStatus("convertingImages", "info", { current: index + 1, total: targets.length });
       try {
-        const blob = await createOutputBlob(documentRecord, kind);
+        const blob = await createOutputBlob(documentRecord, kind, exportOptions);
         const name = createUniqueOutputName(documentRecord.file.name, EXPORT_FORMATS[kind].extension, usedNames);
+        const nameBytes = new TextEncoder().encode(name).length;
+        const entrySize = calculateStoredZipEntrySize(nameBytes, blob.size);
+        if (!entrySize || archiveBytes + entrySize > MAX_ARCHIVE_BYTES) throw new StatusError("batchTooLarge");
+        archiveBytes += entrySize;
         entries.push({ name, blob });
         documentRecord.exportState = "success";
-      } catch {
+      } catch (error) {
+        if (error instanceof StatusError && error.key === "batchTooLarge") throw error;
         failed++;
         documentRecord.exportState = "error";
       }
@@ -1103,7 +1098,11 @@ async function exportImageArchive(targets, kind) {
     if (!entries.length) throw new StatusError("exportFailed");
     setStatus("creatingZip", "info");
     summary = { success: entries.length, failed };
-    return createStoredZip(entries, new Date());
+    try {
+      return await createStoredZip(entries, new Date());
+    } catch {
+      throw new StatusError("zipFailed");
+    }
   });
   if (!result || !summary) return;
   if (summary.failed) setStatus("exportPartial", "warning", { name: result.name, success: summary.success, failed: summary.failed });
@@ -1111,7 +1110,7 @@ async function exportImageArchive(targets, kind) {
 }
 
 function beginExport() {
-  if (exportInProgress || state.opening) return false;
+  if (exportInProgress || state.opening || state.detailLoading) return false;
   openRequestId++;
   detailRequestId++;
   exportInProgress = true;
@@ -1126,13 +1125,17 @@ function endExport() {
   renderGallery();
 }
 
-async function createOutputBlob(documentRecord, kind) {
+async function createOutputBlob(documentRecord, kind, exportOptions) {
+  const { width, height } = getDocumentDimensions(documentRecord);
+  if (!validatePixelDimensions(width, height)) throw new StatusError("imageTooLarge");
+  if (kind === "ctex" && (width > CTEX_MAX_DIMENSION || height > CTEX_MAX_DIMENSION)) throw new StatusError("dimensionLimit");
   const image = await decodeDocumentSource(documentRecord);
-  const canvas = createRenderedCanvas(documentRecord, image, kind === "jpg" ? state.background.color : null);
+  const canvas = createRenderedCanvas(documentRecord, image, kind === "jpg" ? exportOptions.backgroundColor : null);
   if (kind === "png") return canvasBlob(canvas, "image/png");
   if (kind === "jpg") return canvasBlob(canvas, "image/jpeg", 1);
-  if (canvas.width > CTEX_MAX_DIMENSION || canvas.height > CTEX_MAX_DIMENSION) throw new StatusError("dimensionLimit");
-  return createCtexBlob(canvas);
+  if (kind === "bmp") return createBmpBlob(canvas, getDocumentDpi(documentRecord));
+  if (kind === "ctex") return createCtexBlob(canvas);
+  throw new StatusError("exportFailed");
 }
 
 function createRenderedCanvas(documentRecord, image, backgroundColor = null) {
@@ -1141,12 +1144,33 @@ function createRenderedCanvas(documentRecord, image, backgroundColor = null) {
   canvas.width = width;
   canvas.height = height;
   const targetContext = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
+  if (!targetContext) throw new StatusError("imageTooLarge");
   if (backgroundColor) {
     targetContext.fillStyle = backgroundColor;
     targetContext.fillRect(0, 0, width, height);
   }
   drawTransformedImage(targetContext, image, documentRecord, width, height);
   return canvas;
+}
+
+function getDocumentDpi(documentRecord) {
+  if (!documentRecord.metadata.dpi) return null;
+  return isSideways(documentRecord)
+    ? { x: documentRecord.metadata.dpi.y, y: documentRecord.metadata.dpi.x }
+    : { ...documentRecord.metadata.dpi };
+}
+
+function createBmpBlob(canvas, dpi) {
+  const header = createBmpHeader(canvas.width, canvas.height, dpi);
+  const pixelBytes = new Uint8Array(canvas.width * canvas.height * 4);
+  const sourceContext = canvas.getContext("2d", { willReadFrequently: true });
+  if (!sourceContext) throw new StatusError("exportFailed");
+  for (let sourceY = 0; sourceY < canvas.height; sourceY += BMP_SCAN_ROWS) {
+    const rowCount = Math.min(BMP_SCAN_ROWS, canvas.height - sourceY);
+    const rgba = sourceContext.getImageData(0, sourceY, canvas.width, rowCount).data;
+    writeBmpBgraRows(rgba, pixelBytes, canvas.width, sourceY, rowCount, canvas.height);
+  }
+  return new Blob([header, pixelBytes], { type: "image/bmp" });
 }
 
 async function createCtexBlob(canvas) {
@@ -1183,142 +1207,14 @@ async function saveExport(suggestedName, mime, extension, description, blobFacto
   return { name: suggestedName };
 }
 
-function createUniqueOutputName(originalName, extension, usedNames) {
-  const stem = baseName(originalName);
-  let candidate = `${stem}${extension}`;
-  let number = 2;
-  while (usedNames.has(candidate.toLocaleLowerCase("en-US"))) candidate = `${stem} (${number++})${extension}`;
-  usedNames.add(candidate.toLocaleLowerCase("en-US"));
-  return candidate;
-}
-
-function createTimestampZipName(date) {
-  const part = (value) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}_${part(date.getHours())}-${part(date.getMinutes())}-${part(date.getSeconds())}.zip`;
-}
-
-async function createStoredZip(entries, timestamp) {
-  const localParts = [];
-  const centralParts = [];
-  const { time, date } = toDosDateTime(timestamp);
-  let offset = 0;
-  let centralSize = 0;
-
-  for (const entry of entries) {
-    const nameBytes = new TextEncoder().encode(entry.name);
-    if (nameBytes.length > 0xffff || entry.blob.size > ZIP_UINT32_MAX || offset > ZIP_UINT32_MAX) throw new StatusError("zipFailed");
-    const crc = await crc32Blob(entry.blob);
-    const size = entry.blob.size;
-
-    const localHeader = new Uint8Array(30 + nameBytes.length);
-    const localView = new DataView(localHeader.buffer);
-    localView.setUint32(0, 0x04034b50, true);
-    localView.setUint16(4, 20, true);
-    localView.setUint16(6, 0x0800, true);
-    localView.setUint16(8, 0, true);
-    localView.setUint16(10, time, true);
-    localView.setUint16(12, date, true);
-    localView.setUint32(14, crc, true);
-    localView.setUint32(18, size, true);
-    localView.setUint32(22, size, true);
-    localView.setUint16(26, nameBytes.length, true);
-    localView.setUint16(28, 0, true);
-    localHeader.set(nameBytes, 30);
-    localParts.push(localHeader, entry.blob);
-
-    const centralHeader = new Uint8Array(46 + nameBytes.length);
-    const centralView = new DataView(centralHeader.buffer);
-    centralView.setUint32(0, 0x02014b50, true);
-    centralView.setUint16(4, 20, true);
-    centralView.setUint16(6, 20, true);
-    centralView.setUint16(8, 0x0800, true);
-    centralView.setUint16(10, 0, true);
-    centralView.setUint16(12, time, true);
-    centralView.setUint16(14, date, true);
-    centralView.setUint32(16, crc, true);
-    centralView.setUint32(20, size, true);
-    centralView.setUint32(24, size, true);
-    centralView.setUint16(28, nameBytes.length, true);
-    centralView.setUint16(30, 0, true);
-    centralView.setUint16(32, 0, true);
-    centralView.setUint16(34, 0, true);
-    centralView.setUint16(36, 0, true);
-    centralView.setUint32(38, 0, true);
-    centralView.setUint32(42, offset, true);
-    centralHeader.set(nameBytes, 46);
-    centralParts.push(centralHeader);
-    centralSize += centralHeader.length;
-    offset += localHeader.length + size;
-  }
-
-  if (offset + centralSize > ZIP_UINT32_MAX) throw new StatusError("zipFailed");
-  const end = new Uint8Array(22);
-  const endView = new DataView(end.buffer);
-  endView.setUint32(0, 0x06054b50, true);
-  endView.setUint16(4, 0, true);
-  endView.setUint16(6, 0, true);
-  endView.setUint16(8, entries.length, true);
-  endView.setUint16(10, entries.length, true);
-  endView.setUint32(12, centralSize, true);
-  endView.setUint32(16, offset, true);
-  endView.setUint16(20, 0, true);
-  return new Blob([...localParts, ...centralParts, end], { type: "application/zip" });
-}
-
-function toDosDateTime(value) {
-  const year = Math.max(1980, Math.min(2107, value.getFullYear()));
-  return {
-    time: (value.getHours() << 11) | (value.getMinutes() << 5) | Math.floor(value.getSeconds() / 2),
-    date: ((year - 1980) << 9) | ((value.getMonth() + 1) << 5) | value.getDate()
-  };
-}
-
-function createCrc32Table() {
-  const table = new Uint32Array(256);
-  for (let index = 0; index < 256; index++) {
-    let value = index;
-    for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ (value & 1 ? 0xedb88320 : 0);
-    table[index] = value >>> 0;
-  }
-  return table;
-}
-
-async function crc32Blob(blob) {
-  let crc = 0xffffffff;
-  if (blob.stream) {
-    const reader = blob.stream().getReader();
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      for (const byte of value) crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
-    }
-  } else {
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    for (const byte of bytes) crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function createWebpCtexHeader(width, height, pixelFormat, payloadSize) {
-  const header = new Uint8Array(CTEX_WEBP_PAYLOAD_OFFSET);
-  header.set([0x47, 0x53, 0x54, 0x32]);
-  const view = new DataView(header.buffer);
-  view.setUint32(4, 1, true);
-  view.setUint32(8, width, true);
-  view.setUint32(12, height, true);
-  header.set([0x00, 0x00, 0x00, 0x0d], 16);
-  view.setUint32(20, 0xffffffff, true);
-  view.setUint32(36, DATA_FORMAT_WEBP, true);
-  view.setUint16(40, width, true);
-  view.setUint16(42, height, true);
-  view.setUint32(48, pixelFormat, true);
-  view.setUint32(52, payloadSize, true);
-  return header;
-}
-
 function hasTransparency(canvas) {
-  const pixels = canvas.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height).data;
-  for (let offset = 3; offset < pixels.length; offset += 4) if (pixels[offset] !== 255) return true;
+  const sourceContext = canvas.getContext("2d", { willReadFrequently: true });
+  if (!sourceContext) throw new StatusError("exportFailed");
+  for (let y = 0; y < canvas.height; y += ALPHA_SCAN_ROWS) {
+    const rows = Math.min(ALPHA_SCAN_ROWS, canvas.height - y);
+    const pixels = sourceContext.getImageData(0, y, canvas.width, rows).data;
+    for (let offset = 3; offset < pixels.length; offset += 4) if (pixels[offset] !== 255) return true;
+  }
   return false;
 }
 
@@ -1340,6 +1236,9 @@ function resetDocumentState() {
     galleryScaleFrame = 0;
   }
   for (const documentRecord of state.documents) if (documentRecord.thumbnailUrl) URL.revokeObjectURL(documentRecord.thumbnailUrl);
+  elements.gallery.replaceChildren();
+  elements.gallery.className = "gallery";
+  elements.gallery.style.removeProperty("--gallery-columns");
   state.documents = [];
   state.selectedId = null;
   state.view = "empty";
@@ -1348,6 +1247,7 @@ function resetDocumentState() {
   state.galleryScrollLeft = 0;
   state.activeImage = null;
   state.activeImageId = null;
+  state.detailLoading = false;
   state.zoom = 1;
   state.opening = false;
   elements.canvas.width = 0;
@@ -1366,14 +1266,15 @@ function updateControls() {
   elements.clearFile.disabled = (!state.documents.length && !state.opening) || exportInProgress;
   for (const element of [elements.rotateLeft, elements.rotateRight, elements.rotate180, elements.resetTransform, elements.flipHorizontal, elements.flipVertical]) element.disabled = !editable;
   for (const element of [elements.zoomIn, elements.zoomOut, elements.zoomReset]) element.disabled = !zoomable;
-  for (const element of [elements.openPng, elements.openJpg, elements.openCtex]) element.disabled = exportInProgress;
+  for (const element of [elements.openPng, elements.openJpg, elements.openBmp, elements.openCtex]) element.disabled = exportInProgress;
+  for (const element of [elements.jpgBackground, elements.bgR, elements.bgG, elements.bgB, elements.bgHex, elements.bgColorPicker]) element.disabled = exportInProgress;
   updateExportButtons();
   updatePreviewActions();
 }
 
 function updateExportButtons() {
-  const disabled = exportInProgress || state.opening || !state.documents.some((item) => item.checked && !item.errorKey);
-  for (const element of [elements.exportPng, elements.exportJpg, elements.exportCtex]) element.disabled = disabled;
+  const disabled = exportInProgress || state.opening || state.detailLoading || !state.documents.some((item) => item.checked && !item.errorKey);
+  for (const element of [elements.exportPng, elements.exportJpg, elements.exportBmp, elements.exportCtex]) element.disabled = disabled;
 }
 
 function setStatus(key, type = "info", values = {}) {
@@ -1388,19 +1289,6 @@ function renderStatus() {
   elements.status.className = `status status-${type}`;
 }
 
-function isPng(file) {
-  return file.type === "image/png" || /\.png$/i.test(file.name);
-}
-
-function isJpg(file) {
-  return file.type === "image/jpeg" || JPG_EXTENSION.test(file.name);
-}
-
-function isPngSignature(bytes) {
-  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-  return signature.every((value, index) => bytes[index] === value);
-}
-
 function formatBytes(bytes) {
   if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -1411,22 +1299,6 @@ function formatBytes(bytes) {
 
 function formatDpi(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-}
-
-function readUint32(bytes, offset) {
-  return new DataView(bytes.buffer, bytes.byteOffset + offset, 4).getUint32(0, true);
-}
-
-function readUint16(bytes, offset) {
-  return new DataView(bytes.buffer, bytes.byteOffset + offset, 2).getUint16(0, true);
-}
-
-function readUint16BE(bytes, offset) {
-  return new DataView(bytes.buffer, bytes.byteOffset + offset, 2).getUint16(0, false);
-}
-
-function readAscii(bytes, offset, length) {
-  return String.fromCharCode(...bytes.slice(offset, offset + length));
 }
 
 function decodeImage(blob) {
@@ -1450,7 +1322,7 @@ function canvasBlob(canvas, type, quality) {
 }
 
 function baseName(name) {
-  return name.replace(/\.(png|jpg|jpeg|jpe|jfif|ctex)$/i, "") || "image";
+  return stripSupportedExtension(name);
 }
 
 function getSavedLanguage() {
@@ -1487,3 +1359,4 @@ function applyTheme() {
 setLanguage(state.language);
 updateBackgroundControls();
 renderApplication();
+document.documentElement.classList.remove("i18n-pending");
