@@ -4,10 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Convert and preview PNG, JPEG, BMP, and Godot CTEX images locally in your browser, including batch export for up to 20 images." />
-    <title>CTEX Converter v0.8.3</title>
+    <title>CTEX Converter v0.8.4</title>
     <script>
       (() => {
-        const languages = ["en", "ko", "zh-CN", "zh-TW", "ja", "ru"];
+        const languages = ["en", "ko", "zh-CN", "zh-TW", "ja", "ru", "es"];
         try {
           if (localStorage.getItem("ctex-converter-theme") === "dark") document.documentElement.dataset.theme = "dark";
           const language = localStorage.getItem("ctex-converter-language");
@@ -19,36 +19,36 @@
         window.setTimeout(() => document.documentElement.classList.remove("i18n-pending"), 2000);
       })();
     </script>
-    <link rel="icon" href="favicon.svg?v=0.8.3" type="image/svg+xml" />
-    <link rel="stylesheet" href="style.css?v=0.8.3" />
+    <link rel="icon" href="favicon.svg?v=0.8.4" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css?v=0.8.4" />
   </head>
   <body>
     <main class="app-shell">
       <header>
-          <div><p class="eyebrow" data-i18n="browserLocal">BROWSER-BASED · LOCAL ONLY</p><h1>CTEX Converter <span>v0.8.3</span></h1></div>
+          <div><p class="eyebrow" data-i18n="browserLocal">LOCAL PROCESSING · UP TO 20 IMAGES AT ONCE</p><h1>CTEX Converter <span>v0.8.4</span></h1></div>
         <div class="header-actions">
-          <div class="header-controls"><label class="language-select"><span class="sr-only" data-i18n="languageLabel">Language</span><select id="language-select" aria-label="Language" data-i18n-aria="languageLabel"><option value="en">English</option><option value="ko">한국어</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ru">Русский</option></select></label><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode">🌙</button></div>
+          <div class="header-controls"><label class="language-select"><span class="sr-only" data-i18n="languageLabel">Language</span><select id="language-select" aria-label="Language" data-i18n-aria="languageLabel"><option value="en">English</option><option value="ko">한국어</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ru">Русский</option><option value="es">Español</option></select></label><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode">🌙</button></div>
           <p id="status" class="status status-info" role="status"><span id="status-icon" class="status-icon" aria-hidden="true">ⓘ</span><span id="status-text">Open images to begin.</span></p>
         </div>
       </header>
       <section class="workspace">
         <aside class="sidebar">
-          <h2 data-i18n="openFiles">Open Image</h2>
-          <div class="open-buttons"><button id="open-png" type="button" data-i18n="openPng">Open PNG</button><button id="open-jpg" type="button" data-i18n="openJpg">Open JPG</button><button id="open-bmp" type="button" data-i18n="openBmp">Open BMP</button><button id="open-ctex" type="button" data-i18n="openCtex">Open CTEX</button></div>
-          <button id="clear-file" type="button" class="clear-button" disabled data-i18n="clearFile">Reset</button>
-          <input id="png-input" type="file" accept=".png" multiple hidden /><input id="jpg-input" type="file" accept=".jpg,.jpeg,.jpe,.jfif,.jif,.jfi,.pjpeg,.pjp" multiple hidden /><input id="bmp-input" type="file" accept=".bmp" multiple hidden /><input id="ctex-input" type="file" accept=".ctex" multiple hidden />
+          <div class="panel-heading"><h2 data-i18n="openFiles">Open Image</h2><span class="info-control"><button class="info-button" type="button" aria-expanded="false" aria-describedby="open-help" data-info-button data-i18n-aria="openInfoLabel">ⓘ</button><span id="open-help" class="info-popover" role="tooltip" data-i18n="openHelp">Use a format button to open images of one format, or Open Images to select different supported formats together. You can also drag and drop images or paste them from the clipboard. Up to 20 images can be opened, and opening new images replaces the current list.</span></span></div>
+          <div class="format-buttons open-buttons"><button id="open-png" type="button">PNG</button><button id="open-jpg" type="button">JPG</button><button id="open-bmp" type="button">BMP</button><button id="open-ctex" type="button">CTEX</button></div>
+          <div class="open-actions"><button id="open-together" type="button" data-i18n="openTogether">Open Images</button><button id="clear-file" type="button" class="clear-button" disabled data-i18n="clearFile">Reset</button></div>
+          <input id="all-input" type="file" accept=".png,.jpg,.jpeg,.jpe,.jfif,.jif,.jfi,.pjpeg,.pjp,.bmp,.ctex" multiple hidden /><input id="png-input" type="file" accept=".png" multiple hidden /><input id="jpg-input" type="file" accept=".jpg,.jpeg,.jpe,.jfif,.jif,.jfi,.pjpeg,.pjp" multiple hidden /><input id="bmp-input" type="file" accept=".bmp" multiple hidden /><input id="ctex-input" type="file" accept=".ctex" multiple hidden />
           <dl class="metadata"><div><dt data-i18n="fileName">Name</dt><dd id="file-name">-</dd></div><div><dt data-i18n="format">Format</dt><dd id="file-format">-</dd></div><div><dt data-i18n="fileSize">Size</dt><dd id="file-size">-</dd></div><div><dt data-i18n="resolution">Resolution</dt><dd id="resolution">-</dd></div><div id="file-error-row" hidden><dt data-i18n="errorLabel">Error</dt><dd id="file-error">-</dd></div></dl>
         </aside>
         <section class="preview-column">
           <div class="preview-heading">
-            <div class="preview-title"><h2 data-i18n="previewTitle">Preview</h2><span id="preview-count" class="preview-count" aria-live="polite" aria-atomic="true" hidden></span><span class="info-control"><button class="info-button" type="button" aria-expanded="false" aria-describedby="preview-help" data-info-button data-i18n-aria="previewInfoLabel">ⓘ</button><span id="preview-help" class="info-popover" role="tooltip" data-i18n="previewHelp">The border marks the current image, and the checkbox controls export. × removes an image only from this list. Double-click or press Enter to view an image larger. Use the arrow keys to navigate and Space to toggle export selection.</span></span></div>
+            <div class="preview-title"><h2 data-i18n="previewTitle">Preview</h2><span id="preview-count" class="preview-count" aria-live="polite" aria-atomic="true" hidden></span><span class="info-control"><button class="info-button" type="button" aria-expanded="false" aria-describedby="preview-help" data-info-button data-i18n-aria="previewInfoLabel">ⓘ</button><span id="preview-help" class="info-popover info-popover-paragraphs" role="tooltip"><span data-i18n="previewHelpExport">Images selected with a checkbox can be exported in the desired format from Export Image.</span><span data-i18n="previewHelpCurrent">The image marked by a border can be inspected, viewed larger, and edited.</span><span data-i18n="previewHelpKeyboard">In the grid, use the arrow keys to select another image, Enter to view it larger, and Space to toggle its export selection.</span></span></span></div>
             <div class="preview-actions"><button id="select-all" class="secondary-button compact-button" type="button" hidden data-i18n="selectAll">Select all</button><button id="view-larger" class="secondary-button compact-button" type="button" hidden data-i18n="viewLarger">View larger</button><button id="back-list" class="secondary-button compact-button" type="button" aria-keyshortcuts="Escape" hidden data-i18n="backToList">← Back to list</button><button id="previous-image" class="secondary-button compact-button" type="button" aria-keyshortcuts="ArrowLeft" hidden data-i18n="previousImage">← Previous</button><button id="next-image" class="secondary-button compact-button" type="button" aria-keyshortcuts="ArrowRight" hidden data-i18n="nextImage">Next →</button></div>
           </div>
           <section id="preview-panel" class="preview-panel" aria-label="Image preview" data-i18n-aria="previewLabel"><div id="drop-zone" class="drop-zone"><strong data-i18n="dropFiles">Drag &amp; Drop Images</strong></div><div id="drop-overlay" class="drop-overlay" hidden aria-hidden="true"><strong data-i18n="replaceDrop">Drop images to replace the current list.</strong></div><div id="gallery" class="gallery" hidden></div><div id="preview-loading" class="preview-loading" hidden data-i18n="loadingPreview">Loading preview…</div><div id="canvas-wrap" class="canvas-wrap" hidden><canvas id="preview-canvas"></canvas></div></section>
         </section>
         <aside class="sidebar tools">
-          <h2 data-i18n="export">Export Image</h2>
-          <button id="export-png" type="button" disabled data-i18n="exportPng">Export PNG</button><button id="export-jpg" type="button" disabled data-i18n="exportJpg">Export JPG</button><button id="export-bmp" type="button" disabled data-i18n="exportBmp">Export BMP</button><button id="export-ctex" type="button" disabled data-i18n="exportCtex">Export CTEX</button>
+          <div class="panel-heading"><h2 data-i18n="export">Export Image</h2><span class="info-control"><button class="info-button" type="button" aria-expanded="false" aria-describedby="export-help" data-info-button data-i18n-aria="exportInfoLabel">ⓘ</button><span id="export-help" class="info-popover" role="tooltip" data-i18n="exportHelp">Only checked images are exported. One image is saved as an individual file, while two or more are saved in an uncompressed ZIP. An unedited image exported to the same format is saved unchanged.</span></span></div>
+          <div class="format-buttons export-buttons"><button id="export-png" type="button" disabled>PNG</button><button id="export-jpg" type="button" disabled>JPG</button><button id="export-bmp" type="button" disabled>BMP</button><button id="export-ctex" type="button" disabled>CTEX</button></div>
           <section class="export-settings" aria-label="Export settings" data-i18n-aria="exportSettings">
             <div class="section-heading">
               <span data-i18n="jpgBackground">JPG Background</span>
@@ -69,6 +69,6 @@
       </section>
       <footer class="footer"><a href="https://github.com/Copy-TT" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">🛠</span> <span data-i18n="creatorLabel">Creator:</span> Copy_TT</a><span class="footer-divider" aria-hidden="true">·</span><a href="https://ko-fi.com/copy_tt" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">☕</span> <span data-i18n="supportCreator">Support on Ko-fi</span></a></footer>
     </main>
-    <script type="module" src="app.js?v=0.8.3"></script>
+    <script type="module" src="app.js?v=0.8.4"></script>
   </body>
 </html>

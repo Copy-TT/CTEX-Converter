@@ -194,13 +194,27 @@ h1 span { color: var(--accent); font-size: .5em; font-weight: 700; }
 
 .sidebar h2 { font-size: 1rem; margin-bottom: 1rem; }
 
-.open-buttons {
-  display: grid;
+.panel-heading {
+  align-items: center;
+  display: flex;
   gap: .5rem;
-  grid-template-columns: 1fr;
+  justify-content: space-between;
+  margin-bottom: 1rem;
 }
 
-.open-buttons button { margin-top: .25rem; padding-inline: .45rem; }
+.sidebar .panel-heading h2 { margin-bottom: 0; }
+
+.format-buttons,
+.open-actions {
+  display: grid;
+  gap: .5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.format-buttons button { padding-inline: .45rem; }
+
+.open-actions { margin-top: .7rem; }
+.open-actions button { font-size: .86rem; padding-inline: .35rem; }
 
 .clear-button,
 .secondary-button {
@@ -209,7 +223,7 @@ h1 span { color: var(--accent); font-size: .5em; font-weight: 700; }
   color: var(--text);
 }
 
-.clear-button { margin-top: .7rem; width: 100%; }
+.clear-button { width: 100%; }
 .clear-button:hover:not(:disabled),
 .secondary-button:hover:not(:disabled) { background: var(--panel-alt); }
 
@@ -425,6 +439,25 @@ h1 span { color: var(--accent); font-size: .5em; font-weight: 700; }
 
 .gallery-remove:hover:not(:disabled) { background: var(--panel-alt); }
 
+.gallery-edited-badge {
+  align-items: center;
+  background: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--panel) 75%, transparent);
+  border-radius: 999px;
+  color: var(--button-text);
+  display: flex;
+  font-size: .72rem;
+  font-weight: 800;
+  height: 25px;
+  justify-content: center;
+  line-height: 1;
+  position: absolute;
+  right: 3.05rem;
+  top: .85rem;
+  width: 25px;
+  z-index: 2;
+}
+
 .gallery-name {
   align-items: center;
   background: color-mix(in srgb, var(--panel) 88%, transparent);
@@ -499,7 +532,7 @@ input[aria-invalid="true"] {
   gap: .7rem;
 }
 
-.tools h2 { margin-bottom: .3rem; }
+.tools .panel-heading { margin-bottom: .3rem; }
 
 .export-settings {
   border-top: 1px solid var(--line);
@@ -694,7 +727,7 @@ input[aria-invalid="true"] {
   .sidebar:not(.tools) { order: 1; }
   .preview-column { min-height: 460px; order: 2; }
   .tools { order: 3; }
-  .open-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .format-buttons { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .metadata {
     column-gap: .75rem;
     display: grid;
@@ -706,8 +739,9 @@ input[aria-invalid="true"] {
   .preview-actions { gap: .35rem; }
   .preview-panel { min-height: 400px; padding: 1rem; }
   .gallery { gap: .75rem; }
-  .tools { grid-template-columns: repeat(2, 1fr); }
-  .tools h2,
+  .tools { grid-template-columns: 1fr; }
+  .tools .panel-heading,
+  .export-buttons,
   .export-settings,
   .tools hr,
   .tool-section-heading,

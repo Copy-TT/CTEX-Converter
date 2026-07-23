@@ -23,8 +23,8 @@ import {
   stripSupportedExtension,
   validatePixelDimensions,
   writeBmpBgraRows
-} from "./core.js?v=0.8.3";
-import { translations } from "./locales.js?v=0.8.3";
+} from "./core.js?v=0.8.4";
+import { translations } from "./locales.js?v=0.8.4";
 
 const FILE_SIGNATURE_BYTES = 70;
 const MAX_FILES = 20;
@@ -34,7 +34,15 @@ const BMP_SCAN_ROWS = 32;
 const ALPHA_SCAN_ROWS = 128;
 const PRESET_COLORS = { white: "#ffffff", gray: "#808080", black: "#000000" };
 const FORMAT_BADGES = { png: "PNG", jpg: "JPG", bmp: "BMP", ctex: "CTEX" };
-const SUPPORTED_LANGUAGES = ["en", "ko", "zh-CN", "zh-TW", "ja", "ru"];
+const CLIPBOARD_MIME_KINDS = new Map([
+  ["image/png", "png"],
+  ["image/jpeg", "jpg"],
+  ["image/jpg", "jpg"],
+  ["image/pjpeg", "jpg"],
+  ["image/bmp", "bmp"],
+  ["image/x-ms-bmp", "bmp"]
+]);
+const SUPPORTED_LANGUAGES = ["en", "ko", "zh-CN", "zh-TW", "ja", "ru", "es"];
 const BACKGROUND_STORAGE_KEY = "ctex-converter-jpg-background";
 
 const state = {
@@ -63,7 +71,9 @@ const elements = {
   openJpg: $("open-jpg"),
   openBmp: $("open-bmp"),
   openCtex: $("open-ctex"),
+  openTogether: $("open-together"),
   clearFile: $("clear-file"),
+  allInput: $("all-input"),
   pngInput: $("png-input"),
   jpgInput: $("jpg-input"),
   bmpInput: $("bmp-input"),
@@ -135,7 +145,9 @@ elements.openPng.addEventListener("click", () => elements.pngInput.click());
 elements.openJpg.addEventListener("click", () => elements.jpgInput.click());
 elements.openBmp.addEventListener("click", () => elements.bmpInput.click());
 elements.openCtex.addEventListener("click", () => elements.ctexInput.click());
+elements.openTogether.addEventListener("click", () => elements.allInput.click());
 elements.clearFile.addEventListener("click", clearDocuments);
+elements.allInput.addEventListener("change", (event) => handleFileInput(event));
 elements.pngInput.addEventListener("change", (event) => handleFileInput(event, "png"));
 elements.jpgInput.addEventListener("change", (event) => handleFileInput(event, "jpg"));
 elements.bmpInput.addEventListener("change", (event) => handleFileInput(event, "bmp"));
@@ -222,6 +234,7 @@ for (const button of infoButtons) {
 }
 document.addEventListener("click", closeInfoPopovers);
 document.addEventListener("keydown", handleDocumentKeydown);
+document.addEventListener("paste", handlePaste);
 
 function isFileDrag(event) {
   return dragDepth > 0 || [...(event.dataTransfer?.types || [])].includes("Files");
@@ -289,6 +302,17 @@ function setLanguage(language) {
     [elements.previousImage, "previousImage"],
     [elements.nextImage, "nextImage"]
   ]) setButtonLabel(element, key);
+  for (const [element, key] of [
+    [elements.openPng, "openPng"],
+    [elements.openJpg, "openJpg"],
+    [elements.openBmp, "openBmp"],
+    [elements.openCtex, "openCtex"],
+    [elements.openTogether, "openTogether"],
+    [elements.exportPng, "exportPng"],
+    [elements.exportJpg, "exportJpg"],
+    [elements.exportBmp, "exportBmp"],
+    [elements.exportCtex, "exportCtex"]
+  ]) setButtonLabel(element, key);
   elements.languageSelect.value = state.language;
   try { localStorage.setItem("ctex-converter-language", state.language); } catch {}
   renderGallery();
@@ -351,6 +375,51 @@ function positionInfoPopover(control) {
     : Math.min(window.innerHeight - margin - visibleHeight, rect.bottom + gap);
   popover.style.left = `${Math.round(left)}px`;
   popover.style.top = `${Math.round(Math.max(margin, top))}px`;
+}
+
+function handlePaste(event) {
+  if (isInteractiveKeyboardTarget(event.target) || state.opening || exportInProgress) return;
+  const files = getClipboardImageFiles(event.clipboardData);
+  if (!files.length) return;
+  event.preventDefault();
+  openFiles(nameClipboardFiles(files));
+}
+
+function getClipboardImageFiles(clipboardData) {
+  if (!clipboardData) return [];
+  const itemFiles = [...(clipboardData.items || [])]
+    .filter((item) => item.kind === "file")
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+  const candidates = itemFiles.length ? itemFiles : [...(clipboardData.files || [])];
+  return candidates.filter((file) => detectHintKind(file) || CLIPBOARD_MIME_KINDS.has((file.type || "").toLowerCase()));
+}
+
+function nameClipboardFiles(files, now = new Date()) {
+  const timestamp = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0")
+  ].join("-") + "_" + [
+    String(now.getHours()).padStart(2, "0"),
+    String(now.getMinutes()).padStart(2, "0"),
+    String(now.getSeconds()).padStart(2, "0")
+  ].join("-");
+  let generated = 0;
+  return files.map((file) => {
+    if (isMeaningfulClipboardName(file.name)) return file;
+    generated++;
+    const kind = detectHintKind(file) || CLIPBOARD_MIME_KINDS.get((file.type || "").toLowerCase()) || "png";
+    const suffix = generated === 1 ? "" : `-${generated}`;
+    return new File([file], `clipboard-${timestamp}${suffix}.${kind}`, {
+      type: file.type,
+      lastModified: file.lastModified
+    });
+  });
+}
+
+function isMeaningfulClipboardName(name) {
+  return Boolean(name && !/^(?:image|clipboard|blob)(?:\.[a-z0-9]+)?$/i.test(name.trim()));
 }
 
 function handleFileInput(event, expectedKind) {
@@ -636,6 +705,16 @@ function renderGallery() {
       removeDocument(documentRecord.id);
     });
 
+    let editedBadge = null;
+    if (hasDocumentEdits(documentRecord)) {
+      editedBadge = document.createElement("span");
+      editedBadge.className = "gallery-edited-badge";
+      editedBadge.textContent = "✎";
+      editedBadge.title = t("editedImage");
+      editedBadge.setAttribute("role", "img");
+      editedBadge.setAttribute("aria-label", t("editedImage"));
+    }
+
     const thumbnail = document.createElement("div");
     thumbnail.className = "gallery-thumbnail";
     if (documentRecord.thumbnailUrl) {
@@ -666,6 +745,7 @@ function renderGallery() {
 
     selectButton.append(thumbnail, caption);
     tile.append(selectButton, checkbox, remove);
+    if (editedBadge) tile.append(editedBadge);
     const badge = createGalleryBadge(documentRecord);
     if (badge) tile.append(badge);
     elements.gallery.append(tile);
@@ -967,6 +1047,10 @@ function getDocumentDimensions(documentRecord) {
 
 function isSideways(documentRecord) {
   return documentRecord.rotation === 90 || documentRecord.rotation === 270;
+}
+
+function hasDocumentEdits(documentRecord) {
+  return documentRecord.rotation !== 0 || documentRecord.flipX || documentRecord.flipY;
 }
 
 function rotate(degrees, statusKey) {
@@ -1272,6 +1356,7 @@ async function createOutputBlob(documentRecord, kind, exportOptions) {
   const { width, height } = getDocumentDimensions(documentRecord);
   if (!validatePixelDimensions(width, height)) throw new StatusError("imageTooLarge");
   if (kind === "ctex" && (width > CTEX_MAX_DIMENSION || height > CTEX_MAX_DIMENSION)) throw new StatusError("dimensionLimit");
+  if (kind === documentRecord.kind && !hasDocumentEdits(documentRecord)) return documentRecord.file;
   const image = await decodeDocumentSource(documentRecord);
   const canvas = createRenderedCanvas(documentRecord, image, kind === "jpg" ? exportOptions.backgroundColor : null);
   if (kind === "png") return canvasBlob(canvas, "image/png");
@@ -1411,7 +1496,7 @@ function updateControls() {
   elements.clearFile.disabled = (!state.documents.length && !state.opening) || exportInProgress;
   for (const element of [elements.rotateLeft, elements.rotateRight, elements.rotate180, elements.resetTransform, elements.flipHorizontal, elements.flipVertical]) element.disabled = !editable;
   for (const element of [elements.zoomIn, elements.zoomOut, elements.zoomReset]) element.disabled = !zoomable;
-  for (const element of [elements.openPng, elements.openJpg, elements.openBmp, elements.openCtex]) element.disabled = exportInProgress;
+  for (const element of [elements.openPng, elements.openJpg, elements.openBmp, elements.openCtex, elements.openTogether]) element.disabled = exportInProgress;
   for (const element of [elements.jpgBackground, elements.bgR, elements.bgG, elements.bgB, elements.bgHex, elements.bgColorPicker]) element.disabled = exportInProgress;
   updateExportButtons();
   updatePreviewActions();
