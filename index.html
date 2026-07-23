@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Convert and preview PNG, JPEG, BMP, and Godot CTEX images locally in your browser, including batch export for up to 20 images." />
-    <title>CTEX Converter v0.8.2</title>
+    <title>CTEX Converter v0.8.3</title>
     <script>
       (() => {
         const languages = ["en", "ko", "zh-CN", "zh-TW", "ja", "ru"];
@@ -19,13 +19,13 @@
         window.setTimeout(() => document.documentElement.classList.remove("i18n-pending"), 2000);
       })();
     </script>
-    <link rel="icon" href="favicon.svg?v=0.8.2" type="image/svg+xml" />
-    <link rel="stylesheet" href="style.css?v=0.8.2" />
+    <link rel="icon" href="favicon.svg?v=0.8.3" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css?v=0.8.3" />
   </head>
   <body>
     <main class="app-shell">
       <header>
-          <div><p class="eyebrow" data-i18n="browserLocal">BROWSER-BASED · LOCAL ONLY</p><h1>CTEX Converter <span>v0.8.2</span></h1></div>
+          <div><p class="eyebrow" data-i18n="browserLocal">BROWSER-BASED · LOCAL ONLY</p><h1>CTEX Converter <span>v0.8.3</span></h1></div>
         <div class="header-actions">
           <div class="header-controls"><label class="language-select"><span class="sr-only" data-i18n="languageLabel">Language</span><select id="language-select" aria-label="Language" data-i18n-aria="languageLabel"><option value="en">English</option><option value="ko">한국어</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ru">Русский</option></select></label><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode">🌙</button></div>
           <p id="status" class="status status-info" role="status"><span id="status-icon" class="status-icon" aria-hidden="true">ⓘ</span><span id="status-text">Open images to begin.</span></p>
@@ -41,10 +41,10 @@
         </aside>
         <section class="preview-column">
           <div class="preview-heading">
-            <div class="preview-title"><h2 data-i18n="previewTitle">Preview</h2><span class="info-control"><button class="info-button" type="button" aria-expanded="false" aria-describedby="preview-help" data-info-button data-i18n-aria="previewInfoLabel">ⓘ</button><span id="preview-help" class="info-popover" role="tooltip" data-i18n="previewHelp">The border shows the current image, and the checkbox shows which images will be exported. × removes an image from the list without deleting the original. Double-click an image or select View larger to open a single-image preview.</span></span></div>
-            <div class="preview-actions"><button id="select-all" class="secondary-button compact-button" type="button" hidden data-i18n="selectAll">Select all</button><button id="view-larger" class="secondary-button compact-button" type="button" hidden data-i18n="viewLarger">View larger</button><button id="back-list" class="secondary-button compact-button" type="button" hidden data-i18n="backToList">← Back to list</button></div>
+            <div class="preview-title"><h2 data-i18n="previewTitle">Preview</h2><span id="preview-count" class="preview-count" aria-live="polite" aria-atomic="true" hidden></span><span class="info-control"><button class="info-button" type="button" aria-expanded="false" aria-describedby="preview-help" data-info-button data-i18n-aria="previewInfoLabel">ⓘ</button><span id="preview-help" class="info-popover" role="tooltip" data-i18n="previewHelp">The border marks the current image, and the checkbox controls export. × removes an image only from this list. Double-click or press Enter to view an image larger. Use the arrow keys to navigate and Space to toggle export selection.</span></span></div>
+            <div class="preview-actions"><button id="select-all" class="secondary-button compact-button" type="button" hidden data-i18n="selectAll">Select all</button><button id="view-larger" class="secondary-button compact-button" type="button" hidden data-i18n="viewLarger">View larger</button><button id="back-list" class="secondary-button compact-button" type="button" aria-keyshortcuts="Escape" hidden data-i18n="backToList">← Back to list</button><button id="previous-image" class="secondary-button compact-button" type="button" aria-keyshortcuts="ArrowLeft" hidden data-i18n="previousImage">← Previous</button><button id="next-image" class="secondary-button compact-button" type="button" aria-keyshortcuts="ArrowRight" hidden data-i18n="nextImage">Next →</button></div>
           </div>
-          <section id="preview-panel" class="preview-panel" aria-label="Image preview" data-i18n-aria="previewLabel"><div id="drop-zone" class="drop-zone"><strong data-i18n="dropFiles">Drag &amp; Drop Images</strong></div><div id="gallery" class="gallery" hidden></div><div id="preview-loading" class="preview-loading" hidden data-i18n="loadingPreview">Loading preview…</div><div id="canvas-wrap" class="canvas-wrap" hidden><canvas id="preview-canvas"></canvas></div></section>
+          <section id="preview-panel" class="preview-panel" aria-label="Image preview" data-i18n-aria="previewLabel"><div id="drop-zone" class="drop-zone"><strong data-i18n="dropFiles">Drag &amp; Drop Images</strong></div><div id="drop-overlay" class="drop-overlay" hidden aria-hidden="true"><strong data-i18n="replaceDrop">Drop images to replace the current list.</strong></div><div id="gallery" class="gallery" hidden></div><div id="preview-loading" class="preview-loading" hidden data-i18n="loadingPreview">Loading preview…</div><div id="canvas-wrap" class="canvas-wrap" hidden><canvas id="preview-canvas"></canvas></div></section>
         </section>
         <aside class="sidebar tools">
           <h2 data-i18n="export">Export Image</h2>
@@ -69,6 +69,6 @@
       </section>
       <footer class="footer"><a href="https://github.com/Copy-TT" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">🛠</span> <span data-i18n="creatorLabel">Creator:</span> Copy_TT</a><span class="footer-divider" aria-hidden="true">·</span><a href="https://ko-fi.com/copy_tt" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">☕</span> <span data-i18n="supportCreator">Support on Ko-fi</span></a></footer>
     </main>
-    <script type="module" src="app.js?v=0.8.2"></script>
+    <script type="module" src="app.js?v=0.8.3"></script>
   </body>
 </html>

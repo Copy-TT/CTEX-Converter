@@ -9,6 +9,7 @@ import {
   MAX_ARCHIVE_BYTES,
   MAX_BATCH_PIXELS,
   calculateGalleryColumns,
+  calculateGalleryNavigationIndex,
   calculateStoredZipEntrySize,
   createBmpHeader,
   createStoredZip,
@@ -22,8 +23,8 @@ import {
   stripSupportedExtension,
   validatePixelDimensions,
   writeBmpBgraRows
-} from "./core.js?v=0.8.2";
-import { translations } from "./locales.js?v=0.8.2";
+} from "./core.js?v=0.8.3";
+import { translations } from "./locales.js?v=0.8.3";
 
 const FILE_SIGNATURE_BYTES = 70;
 const MAX_FILES = 20;
@@ -32,7 +33,9 @@ const GALLERY_RESIZE_DELAY = 100;
 const BMP_SCAN_ROWS = 32;
 const ALPHA_SCAN_ROWS = 128;
 const PRESET_COLORS = { white: "#ffffff", gray: "#808080", black: "#000000" };
+const FORMAT_BADGES = { png: "PNG", jpg: "JPG", bmp: "BMP", ctex: "CTEX" };
 const SUPPORTED_LANGUAGES = ["en", "ko", "zh-CN", "zh-TW", "ja", "ru"];
+const BACKGROUND_STORAGE_KEY = "ctex-converter-jpg-background";
 
 const state = {
   documents: [],
@@ -49,7 +52,7 @@ const state = {
   opening: false,
   language: getSavedLanguage(),
   theme: getSavedTheme(),
-  background: { mode: "white", color: "#ffffff", customColor: "#ffffff" },
+  background: getSavedBackground(),
   status: { key: "start", type: "info", values: {} }
 };
 
@@ -87,9 +90,13 @@ const elements = {
   previewPanel: $("preview-panel"),
   gallery: $("gallery"),
   previewLoading: $("preview-loading"),
+  previewCount: $("preview-count"),
   selectAll: $("select-all"),
   viewLarger: $("view-larger"),
   backList: $("back-list"),
+  previousImage: $("previous-image"),
+  nextImage: $("next-image"),
+  dropOverlay: $("drop-overlay"),
   canvas: $("preview-canvas"),
   canvasWrap: $("canvas-wrap"),
   status: $("status"),
@@ -149,6 +156,8 @@ elements.zoomReset.addEventListener("click", () => setManualZoom(1));
 elements.selectAll.addEventListener("click", toggleAllChecks);
 elements.viewLarger.addEventListener("click", enterDetailView);
 elements.backList.addEventListener("click", returnToList);
+elements.previousImage.addEventListener("click", () => navigateDetail(-1));
+elements.nextImage.addEventListener("click", () => navigateDetail(1));
 elements.languageSelect.addEventListener("change", (event) => setLanguage(event.target.value));
 elements.themeToggle.addEventListener("click", toggleTheme);
 elements.jpgBackground.addEventListener("change", () => setBackgroundMode(elements.jpgBackground.value));
@@ -165,24 +174,34 @@ window.addEventListener("resize", () => {
   if (state.view === "detail" && state.activeImage && state.autoShrink) setZoom(calculateAutoShrinkZoom());
   scheduleGalleryLayoutUpdate();
   positionOpenInfoPopovers();
+  positionDropOverlay();
 });
 window.addEventListener("scroll", positionOpenInfoPopovers, true);
+window.addEventListener("scroll", positionDropOverlay, true);
 
 elements.previewPanel.addEventListener("dragenter", (event) => {
+  if (!isFileDrag(event)) return;
   event.preventDefault();
   dragDepth++;
-  elements.previewPanel.classList.add("dragging");
+  setDragState(true);
 });
-elements.previewPanel.addEventListener("dragover", (event) => event.preventDefault());
+elements.previewPanel.addEventListener("dragover", (event) => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  positionDropOverlay();
+});
 elements.previewPanel.addEventListener("dragleave", (event) => {
+  if (!isFileDrag(event)) return;
   event.preventDefault();
   dragDepth = Math.max(0, dragDepth - 1);
-  if (!dragDepth) elements.previewPanel.classList.remove("dragging");
+  if (!dragDepth) setDragState(false);
 });
 elements.previewPanel.addEventListener("drop", (event) => {
+  if (!isFileDrag(event)) return;
   event.preventDefault();
   dragDepth = 0;
-  elements.previewPanel.classList.remove("dragging");
+  setDragState(false);
   openFiles(event.dataTransfer.files);
 });
 
@@ -202,11 +221,48 @@ for (const button of infoButtons) {
   });
 }
 document.addEventListener("click", closeInfoPopovers);
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
-  closeInfoPopovers();
-  if (document.activeElement?.matches?.("[data-info-button]")) document.activeElement.blur();
-});
+document.addEventListener("keydown", handleDocumentKeydown);
+
+function isFileDrag(event) {
+  return dragDepth > 0 || [...(event.dataTransfer?.types || [])].includes("Files");
+}
+
+function setDragState(active) {
+  elements.previewPanel.classList.toggle("dragging", active);
+  elements.dropOverlay.hidden = !active || state.documents.length === 0;
+  if (active) positionDropOverlay();
+}
+
+function positionDropOverlay() {
+  if (elements.dropOverlay.hidden) return;
+  const rect = elements.previewPanel.getBoundingClientRect();
+  elements.dropOverlay.style.left = `${Math.max(0, rect.left)}px`;
+  elements.dropOverlay.style.top = `${Math.max(0, rect.top)}px`;
+  elements.dropOverlay.style.width = `${Math.max(0, Math.min(rect.right, window.innerWidth) - Math.max(0, rect.left))}px`;
+  elements.dropOverlay.style.height = `${Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(0, rect.top))}px`;
+}
+
+function handleDocumentKeydown(event) {
+  if (event.key === "Escape") {
+    const hadOpenPopover = infoButtons.some((button) => button.closest(".info-control")?.classList.contains("is-open"));
+    closeInfoPopovers();
+    if (document.activeElement?.matches?.("[data-info-button]")) document.activeElement.blur();
+    if (!hadOpenPopover && state.view === "detail" && state.detailFromList) {
+      event.preventDefault();
+      returnToList();
+    }
+    return;
+  }
+  if (event.repeat || state.view !== "detail" || state.detailLoading || exportInProgress || isInteractiveKeyboardTarget(event.target)) return;
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    event.preventDefault();
+    navigateDetail(event.key === "ArrowLeft" ? -1 : 1);
+  }
+}
+
+function isInteractiveKeyboardTarget(target) {
+  return target instanceof Element && Boolean(target.closest("input, select, textarea, [contenteditable='true']"));
+}
 
 function t(key, values = {}) {
   const template = translations[state.language]?.[key] ?? translations.en[key] ?? key;
@@ -227,7 +283,11 @@ function setLanguage(language) {
     [elements.flipVertical, "flipVertical"],
     [elements.zoomOut, "zoomOut10"],
     [elements.zoomReset, "zoomReset"],
-    [elements.zoomIn, "zoomIn10"]
+    [elements.zoomIn, "zoomIn10"],
+    [elements.viewLarger, "viewLarger"],
+    [elements.backList, "backToList"],
+    [elements.previousImage, "previousImage"],
+    [elements.nextImage, "nextImage"]
   ]) setButtonLabel(element, key);
   elements.languageSelect.value = state.language;
   try { localStorage.setItem("ctex-converter-language", state.language); } catch {}
@@ -485,14 +545,13 @@ function renderPreview() {
   elements.previewPanel.classList.toggle("gallery-view", galleryVisible);
   if (state.view === "gallery") renderGallery();
   if (state.view === "detail" && state.activeImage) renderCanvas();
-  updatePreviewActions();
 }
 
 function renderGallery() {
   if (!elements.gallery || state.view !== "gallery") return;
   elements.gallery.replaceChildren();
   updateGalleryLayout();
-  for (const documentRecord of state.documents) {
+  for (const [index, documentRecord] of state.documents.entries()) {
     const tile = document.createElement("article");
     tile.className = "gallery-item";
     tile.dataset.documentId = String(documentRecord.id);
@@ -504,6 +563,7 @@ function renderGallery() {
     selectButton.type = "button";
     selectButton.className = "gallery-select";
     selectButton.setAttribute("aria-label", t("selectImage", { name: documentRecord.file.name }));
+    selectButton.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space");
     if (documentRecord.id === state.selectedId) selectButton.setAttribute("aria-current", "true");
     selectButton.addEventListener("click", () => selectDocument(documentRecord.id));
     selectButton.addEventListener("dblclick", () => {
@@ -513,13 +573,16 @@ function renderGallery() {
     });
     selectButton.addEventListener("keydown", (event) => {
       if (event.repeat) return;
-      if (event.key === "Enter") {
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+        moveGalleryFocus(event, index);
+      } else if (event.key === "Enter") {
         event.preventDefault();
-        if (state.selectedId !== documentRecord.id) selectDocument(documentRecord.id);
-        else if (!documentRecord.errorKey) enterDetailView();
+        selectDocument(documentRecord.id);
+        if (!documentRecord.errorKey) enterDetailView();
       } else if (isSpaceKey(event.key)) {
         event.preventDefault();
         selectDocument(documentRecord.id);
+        toggleDocumentCheck(documentRecord.id);
       }
     });
 
@@ -532,7 +595,6 @@ function renderGallery() {
     const updateCheckedState = () => {
       documentRecord.checked = checkbox.checked;
       updateControls();
-      updatePreviewActions();
     };
     checkbox.addEventListener("change", updateCheckedState);
     checkbox.addEventListener("keydown", (event) => {
@@ -572,11 +634,18 @@ function renderGallery() {
       thumbnail.append(errorIcon);
     }
 
+    const caption = document.createElement("span");
+    caption.className = "gallery-name";
+    const formatBadge = document.createElement("span");
+    formatBadge.className = "gallery-format-badge";
+    formatBadge.textContent = FORMAT_BADGES[documentRecord.kind] || "?";
+    formatBadge.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
-    name.className = "gallery-name";
+    name.className = "gallery-file-name";
     name.textContent = documentRecord.file.name;
+    caption.append(formatBadge, name);
 
-    selectButton.append(thumbnail, name);
+    selectButton.append(thumbnail, caption);
     tile.append(selectButton, checkbox, remove);
     const badge = createGalleryBadge(documentRecord);
     if (badge) tile.append(badge);
@@ -586,6 +655,27 @@ function renderGallery() {
 
 function isSpaceKey(key) {
   return key === " " || key === "Space" || key === "Spacebar";
+}
+
+function moveGalleryFocus(event, index) {
+  const columns = Math.max(1, Number.parseInt(getComputedStyle(elements.gallery).getPropertyValue("--gallery-columns"), 10) || 1);
+  event.preventDefault();
+  const nextIndex = calculateGalleryNavigationIndex(state.documents.length, columns, index, event.key);
+  if (nextIndex === index) return;
+  const documentRecord = state.documents[nextIndex];
+  selectDocument(documentRecord.id);
+  const button = elements.gallery.querySelector(`.gallery-item[data-document-id="${documentRecord.id}"] .gallery-select`);
+  button?.focus({ preventScroll: true });
+  button?.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+function toggleDocumentCheck(id) {
+  const documentRecord = state.documents.find((item) => item.id === id);
+  if (!documentRecord || documentRecord.errorKey || exportInProgress || state.opening) return;
+  documentRecord.checked = !documentRecord.checked;
+  const checkbox = elements.gallery.querySelector(`.gallery-item[data-document-id="${id}"] .gallery-check`);
+  if (checkbox) checkbox.checked = documentRecord.checked;
+  updateControls();
 }
 
 function updateGalleryLayout() {
@@ -697,8 +787,9 @@ async function enterDetailView() {
   const documentRecord = getSelectedDocument();
   if (!documentRecord || documentRecord.errorKey || state.opening || exportInProgress) return;
   const requestId = ++detailRequestId;
-  state.detailFromList = state.view === "gallery";
-  if (state.detailFromList) {
+  const enteringFromGallery = state.view === "gallery";
+  if (enteringFromGallery) {
+    state.detailFromList = true;
     state.galleryScrollTop = elements.previewPanel.scrollTop;
     state.galleryScrollLeft = elements.previewPanel.scrollLeft;
   }
@@ -732,6 +823,17 @@ async function enterDetailView() {
   }
 }
 
+function navigateDetail(direction) {
+  if (state.view !== "detail" || state.detailLoading || state.opening || exportInProgress) return;
+  const documents = state.documents.filter((item) => !item.errorKey);
+  const index = documents.findIndex((item) => item.id === state.selectedId);
+  const next = documents[index + direction];
+  if (index === -1 || !next) return;
+  state.selectedId = next.id;
+  updateMetadata();
+  enterDetailView();
+}
+
 function returnToList() {
   if (!state.detailFromList) return;
   detailRequestId++;
@@ -746,7 +848,15 @@ function returnToList() {
   requestAnimationFrame(() => {
     elements.previewPanel.scrollTop = state.galleryScrollTop;
     elements.previewPanel.scrollLeft = state.galleryScrollLeft;
-    elements.gallery.querySelector(".gallery-item.selected .gallery-select")?.focus({ preventScroll: true });
+    const selectedButton = elements.gallery.querySelector(".gallery-item.selected .gallery-select");
+    selectedButton?.focus({ preventScroll: true });
+    const selectedTile = selectedButton?.closest(".gallery-item");
+    if (selectedTile) {
+      const panelRect = elements.previewPanel.getBoundingClientRect();
+      const tileRect = selectedTile.getBoundingClientRect();
+      const outside = tileRect.top < panelRect.top || tileRect.bottom > panelRect.bottom || tileRect.left < panelRect.left || tileRect.right > panelRect.right;
+      if (outside) selectedTile.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
   });
 }
 
@@ -781,11 +891,21 @@ function updatePreviewActions() {
   const selected = getSelectedDocument();
   const valid = state.documents.filter((item) => !item.errorKey);
   const listVisible = state.view === "gallery" && state.documents.length > 0;
+  const detailNavigationVisible = state.view === "detail" && state.detailFromList && valid.length > 1;
+  const detailIndex = valid.findIndex((item) => item.id === state.selectedId);
+  const checkedCount = valid.filter((item) => item.checked).length;
+  elements.previewCount.hidden = state.documents.length === 0;
+  const countText = state.documents.length ? t("previewCount", { total: state.documents.length, selected: checkedCount }) : "";
+  if (elements.previewCount.textContent !== countText) elements.previewCount.textContent = countText;
   elements.selectAll.hidden = !listVisible;
   elements.viewLarger.hidden = !listVisible;
   elements.backList.hidden = state.view !== "detail" || !state.detailFromList;
+  elements.previousImage.hidden = !detailNavigationVisible;
+  elements.nextImage.hidden = !detailNavigationVisible;
   elements.selectAll.disabled = !valid.length || state.opening || exportInProgress;
   elements.viewLarger.disabled = !selected || Boolean(selected.errorKey) || state.opening || exportInProgress;
+  elements.previousImage.disabled = !detailNavigationVisible || detailIndex <= 0 || state.detailLoading || state.opening || exportInProgress;
+  elements.nextImage.disabled = !detailNavigationVisible || detailIndex < 0 || detailIndex >= valid.length - 1 || state.detailLoading || state.opening || exportInProgress;
   elements.selectAll.textContent = t(valid.length && valid.every((item) => item.checked) ? "deselectAll" : "selectAll");
 }
 
@@ -932,8 +1052,10 @@ function toggleAutoShrink() {
 }
 
 function setBackgroundMode(mode) {
+  if (mode !== "custom" && !Object.hasOwn(PRESET_COLORS, mode)) return;
   state.background.mode = mode;
   state.background.color = mode === "custom" ? state.background.customColor : PRESET_COLORS[mode];
+  saveBackgroundPreference();
   invalidateExportStates();
   updateBackgroundControls();
 }
@@ -968,10 +1090,12 @@ function normalizeHexInput() {
 }
 
 function setCustomBackground(value) {
+  if (!/^#[0-9a-f]{6}$/i.test(value)) return;
   const hex = value.toUpperCase();
   state.background.mode = "custom";
   state.background.customColor = hex;
   state.background.color = hex;
+  saveBackgroundPreference();
   invalidateExportStates();
   updateBackgroundControls();
 }
@@ -1235,6 +1359,8 @@ function resetDocumentState() {
     cancelAnimationFrame(galleryScaleFrame);
     galleryScaleFrame = 0;
   }
+  dragDepth = 0;
+  setDragState(false);
   for (const documentRecord of state.documents) if (documentRecord.thumbnailUrl) URL.revokeObjectURL(documentRecord.thumbnailUrl);
   elements.gallery.replaceChildren();
   elements.gallery.className = "gallery";
@@ -1332,6 +1458,31 @@ function getSavedLanguage() {
   } catch {
     return "en";
   }
+}
+
+function getSavedBackground() {
+  const fallback = { mode: "white", color: PRESET_COLORS.white, customColor: PRESET_COLORS.white };
+  try {
+    const stored = JSON.parse(localStorage.getItem(BACKGROUND_STORAGE_KEY));
+    const mode = stored?.mode === "custom" || Object.hasOwn(PRESET_COLORS, stored?.mode) ? stored.mode : fallback.mode;
+    const customColor = /^#[0-9a-f]{6}$/i.test(stored?.customColor || "") ? stored.customColor.toUpperCase() : fallback.customColor;
+    return {
+      mode,
+      customColor,
+      color: mode === "custom" ? customColor : PRESET_COLORS[mode]
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function saveBackgroundPreference() {
+  try {
+    localStorage.setItem(BACKGROUND_STORAGE_KEY, JSON.stringify({
+      mode: state.background.mode,
+      customColor: state.background.customColor
+    }));
+  } catch {}
 }
 
 function getSavedTheme() {

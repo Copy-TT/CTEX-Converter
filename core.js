@@ -314,6 +314,17 @@ export function calculateGalleryColumns(count, width, height, gap = 16) {
   return best.columns;
 }
 
+export function calculateGalleryNavigationIndex(count, columns, index, key) {
+  if (!Number.isInteger(count) || count < 1 || !Number.isInteger(index) || index < 0 || index >= count) return index;
+  const columnCount = Math.max(1, Math.min(count, Number.isInteger(columns) ? columns : 1));
+  const offsets = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columnCount, ArrowDown: columnCount };
+  const offset = offsets[key];
+  if (!offset) return index;
+  let nextIndex = index + offset;
+  if (key === "ArrowDown" && nextIndex >= count && index < count - 1) nextIndex = count - 1;
+  return nextIndex >= 0 && nextIndex < count ? nextIndex : index;
+}
+
 export function createWebpCtexHeader(width, height, pixelFormat, payloadSize) {
   const header = new Uint8Array(CTEX_WEBP_PAYLOAD_OFFSET);
   header.set([0x47, 0x53, 0x54, 0x32]);
