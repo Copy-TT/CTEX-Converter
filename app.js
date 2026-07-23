@@ -315,7 +315,7 @@ function closeInfoPopovers() {
 function positionOpenInfoPopovers() {
   for (const button of infoButtons) {
     const control = button.closest(".info-control");
-    if (control.classList.contains("is-open")) positionInfoPopover(control);
+    if (control.classList.contains("is-open") || control.matches(":hover") || control.contains(document.activeElement)) positionInfoPopover(control);
   }
 }
 
@@ -323,6 +323,10 @@ function positionInfoPopover(control) {
   const popover = control.querySelector(".info-popover");
   if (!popover) return;
   control.classList.remove("open-up");
+  popover.style.left = "";
+  popover.style.right = "";
+  popover.style.top = "";
+  popover.style.bottom = "";
   popover.style.maxHeight = "";
   const rect = control.getBoundingClientRect();
   const height = popover.scrollHeight;
@@ -331,7 +335,22 @@ function positionInfoPopover(control) {
   const openUp = below < height && above > below;
   if (openUp) control.classList.add("open-up");
   const available = Math.max(96, (openUp ? above : below) - 8);
-  popover.style.maxHeight = `${Math.min(320, available)}px`;
+  const maxHeight = Math.min(320, available);
+  popover.style.maxHeight = `${maxHeight}px`;
+
+  const margin = 12;
+  const gap = 6;
+  const popoverRect = popover.getBoundingClientRect();
+  const width = popoverRect.width;
+  const preferredLeft = control.closest(".preview-title") ? rect.left : rect.right - width;
+  const maximumLeft = Math.max(margin, window.innerWidth - width - margin);
+  const left = Math.min(Math.max(margin, preferredLeft), maximumLeft);
+  const visibleHeight = Math.min(height, maxHeight);
+  const top = openUp
+    ? Math.max(margin, rect.top - gap - visibleHeight)
+    : Math.min(window.innerHeight - margin - visibleHeight, rect.bottom + gap);
+  popover.style.left = `${Math.round(left)}px`;
+  popover.style.top = `${Math.round(Math.max(margin, top))}px`;
 }
 
 function handleFileInput(event, expectedKind) {
